@@ -7,13 +7,9 @@
 # https://www.backblaze.com/blog/making-sense-of-ssd-smart-stats/
 #------------------------------------------------------------------------------
 
-scriptver="v1.0.0"
+scriptver="v1.0.2"
 script=Synology_SMART_info
-#repo="007revad/Synology_SMART_info"
-
-# Show script version
-#echo -e "$script $scriptver\ngithub.com/$repo\n"
-echo "$script $scriptver"
+repo="007revad/Synology_SMART_info"
 
 # Get NAS model
 model=$(cat /proc/sys/kernel/syno_hw_version)
@@ -24,37 +20,96 @@ buildphase=$(/usr/syno/bin/synogetkeyvalue /etc.defaults/VERSION buildphase)
 buildnumber=$(/usr/syno/bin/synogetkeyvalue /etc.defaults/VERSION buildnumber)
 smallfixnumber=$(/usr/syno/bin/synogetkeyvalue /etc.defaults/VERSION smallfixnumber)
 
-# Show DSM full version and model
-if [[ $buildphase == GM ]]; then buildphase=""; fi
-if [[ $smallfixnumber -gt "0" ]]; then smallfix="-$smallfixnumber"; fi
-echo -e "${model} DSM $productversion-$buildnumber$smallfix $buildphase"
-
 # Get DSM major version
 dsm=$(get_key_value /etc.defaults/VERSION majorversion)
-
-
-# Check if -a or --all option used
-if [[ ${1,,} == "--all" ]] || [[ ${1,,} == "-a" ]]; then
-    all=yes
-fi
-
-# Shell Colors
-#Black='\e[0;30m'     # ${Black}
-#Red='\e[0;31m'        # ${Red}
-LiteRed='\e[1;31m'    # ${LiteRed}
-#Green='\e[0;32m'     # ${Green}
-#LiteGreen='\e[0;32m' # ${LiteGreen}
-Yellow='\e[0;33m'     # ${Yellow}
-#Blue='\e[0;34m'      # ${Blue}
-#Purple='\e[0;35m'    # ${Purple}
-Cyan='\e[0;36m'       # ${Cyan}
-#White='\e[0;37m'     # ${White}
-Error='\e[41m'        # ${Error}
-Off='\e[0m'           # ${Off}
 
 ding(){ 
     printf \\a
 }
+
+usage(){ 
+    cat <<EOF
+$script $scriptver - by 007revad
+
+Usage: $(basename "$0") [options]
+
+Options:
+  -a, --all             Show all SMART attributes
+  -e, --email           Disable colored text in output scheduler emails
+  -h, --help            Show this help message
+  -v, --version         Show the script version
+
+EOF
+    exit 0
+}
+
+scriptversion(){ 
+    cat <<EOF
+$script $scriptver - by 007revad
+
+See https://github.com/$repo
+EOF
+    exit 0
+}
+
+# Save options used
+args=("$@")
+
+# Check for flags with getopt
+if options="$(getopt -o abcdefghijklmnopqrstuvwxyz0123456789 -l \
+    all,email,help,version,debug \
+    -- "$@")"; then
+    eval set -- "$options"
+    while true; do
+        case "${1,,}" in
+            -a|--all)           # Show all SMART attributes
+                all=yes
+                ;;
+            -e|--email)         # Disable colour text in task scheduler emails
+                color=no
+                ;;
+            -h|--help)          # Show usage options
+                usage
+                ;;
+            -v|--version)       # Show script version
+                scriptversion
+                ;;
+            -d|--debug)         # Show and log debug info
+                debug=yes
+                ;;
+            --)
+                shift
+                break
+                ;;
+            *)                  # Show usage options
+                echo -e "Invalid option '$1'\n"
+                usage "$1"
+                ;;
+        esac
+        shift
+    done
+else
+    echo
+    usage
+fi
+
+# Shell Colors
+if [[ $color != "no" ]]; then
+    #Black='\e[0;30m'     # ${Black}
+    #Red='\e[0;31m'       # ${Red}
+    LiteRed='\e[1;31m'    # ${LiteRed}
+    #Green='\e[0;32m'     # ${Green}
+    #LiteGreen='\e[0;32m' # ${LiteGreen}
+    Yellow='\e[0;33m'     # ${Yellow}
+    #Blue='\e[0;34m'      # ${Blue}
+    #Purple='\e[0;35m'    # ${Purple}
+    Cyan='\e[0;36m'       # ${Cyan}
+    #White='\e[0;37m'     # ${White}
+    Error='\e[41m'        # ${Error}
+    Off='\e[0m'           # ${Off}
+else
+    echo ""  # For task scheduler email readability
+fi
 
 # Check script is running as root
 if [[ $( whoami ) != "root" ]]; then
@@ -63,6 +118,44 @@ if [[ $( whoami ) != "root" ]]; then
     exit 1  # Not running as root
 fi
 
+# Show script version
+#echo -e "$script $scriptver\ngithub.com/$repo\n"
+echo "$script $scriptver - by 007revad"
+
+# Show DSM full version and model
+if [[ $buildphase == GM ]]; then buildphase=""; fi
+if [[ $smallfixnumber -gt "0" ]]; then smallfix="-$smallfixnumber"; fi
+echo -e "${model} DSM $productversion-$buildnumber$smallfix $buildphase"
+
+# Show options used
+if [[ ${#args[@]} -gt "0" ]]; then
+    echo "Using options: ${args[*]}"
+fi
+
+#------------------------------------------------------------------------------
+# Check latest release with GitHub API
+
+# Get latest release info
+# Curl timeout options:
+# https://unix.stackexchange.com/questions/94604/does-curl-have-a-timeout
+#release=$(curl --silent -m 10 --connect-timeout 5 \
+#    "https://api.github.com/repos/$repo/releases/latest")
+
+# Use wget to avoid installing curl in Ubuntu
+release=$(wget -qO- -q --connect-timeout=5 \
+    "https://api.github.com/repos/$repo/releases/latest")
+
+# Release version
+tag=$(echo "$release" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+#shorttag="${tag:1}"
+
+if ! printf "%s\n%s\n" "$tag" "$scriptver" |
+        sort --check=quiet --version-sort >/dev/null ; then
+    echo -e "\n${Cyan}There is a newer version of this script available.${Off}"
+    echo -e "Current version: ${scriptver}\nLatest version:  $tag"
+fi
+
+#------------------------------------------------------------------------------
 
 show_drive_model(){ 
     # Get drive model
@@ -141,7 +234,7 @@ show_health(){
 }
 
 smart_nvme(){ 
-    # $1 is type
+    # $1 is log type
     if [[ $1 == "error-log" ]]; then
         # Retrieve Error Log and show error count
         errlog="$(nvme error-log "/dev/$drive" | grep error_count | uniq)"
