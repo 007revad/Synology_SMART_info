@@ -45,6 +45,10 @@ sudo -s /volume1/scripts/syno_smart_info.sh --all
 > **Note** <br>
 > The script automatically shows all SMART attributes for any drives that don't return "SMART test passed".
 
+### Scheduling the script in Synology's Task Scheduler
+
+See <a href=how_to_schedule.md/>How to schedule a script in Synology Task Scheduler</a>
+
 ### Options when running the script <a name="options"></a>
 
 There are optional flags you can use when running the script:
