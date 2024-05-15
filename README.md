@@ -44,7 +44,17 @@ sudo -s /volume1/scripts/syno_smart_info.sh --all
 
 ## Screenshots
 
-<p align="center">Clearing critical error for 2 drives</p>
-<p align="center"><img src="/images/script-4.png"></p>
+<p align="center">All healthy</p>
+<p align="center"><img src="/images/all_good.png"></p>
 
+<p align="center">One drive marginal</p>
+<p align="center"><img src="/images/marginal.png"></p>
 
+<p align="center">HDD and SSD</p>
+<p align="center"><img src="/images/hdd_ssd.png"></p>
+
+<p align="center">HDD and SSD when run with --all option</p>
+<p align="center"><img src="/images/hdd_ssd_all.png"></p>
+
+<p align="center">HDD and NVMe when run with --all option</p>
+<p align="center"><img src="/images/hdd_nvme_all.png"></p>
