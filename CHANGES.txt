@@ -1,0 +1,10 @@
+v1.0.3
+- Added exit code to trigger task scheduler email if a drive has SMART errors.
+
+v1.0.2
+- Added check if a new version of the script is available.
+- Added -e --email option to disable coloured output to make task scheduler emails easier to read.
+- Added -h --help and -v --version options.
+
+v1.0.0
+- First release.
