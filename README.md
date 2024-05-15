@@ -42,6 +42,19 @@ To see all the SMART attributes run the script with the -a or --all option:
 sudo -s /volume1/scripts/syno_smart_info.sh --all
 ```
 
+> **Note** <br>
+> The script automatically shows all SMART attributes for any drives that don't return "SMART test passed".
+
+### Options when running the script <a name="options"></a>
+
+There are optional flags you can use when running the script:
+```YAML
+  -a, --all             Show all SMART attributes
+  -e, --email           Disable colored text in output scheduler emails
+  -h, --help            Show this help message
+  -v, --version         Show the script version
+```
+
 ## Screenshots
 
 <p align="center">All healthy</p>
