@@ -7,7 +7,7 @@
 # https://www.backblaze.com/blog/making-sense-of-ssd-smart-stats/
 #------------------------------------------------------------------------------
 
-scriptver="v1.0.2"
+scriptver="v1.0.3"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -240,6 +240,7 @@ smart_nvme(){
         errlog="$(nvme error-log "/dev/$drive" | grep error_count | uniq)"
         errcount="$(echo "$errlog" | awk '{print $3}')"
         if [[ $errcount -gt "0" ]]; then
+            errtotal=$((errtotal +"$errcount"))
             echo -e "SMART Errors Logged: ${LiteRed}$errcount${Off}"
         else
             echo "No SMART Errors Logged"
@@ -331,6 +332,9 @@ for drive in "${nvmes[@]}"; do
     show_drive_model
 
     smart_nvme error-log
+    if [[ $errcount -gt "0" ]]; then
+        errtotal=$((errtotal +"$errcount"))
+    fi
     if [[ $errcount -gt "0" ]] || [[ $all == "yes" ]]; then
         smart_nvme smart-log        
     fi
@@ -338,5 +342,5 @@ done
 
 echo -e "\nFinished\n"
 
-exit
+exit "$errtotal"
 
