@@ -11,7 +11,40 @@
 
 ### Description
 
-Show Synology smart test progress or smart health and attributes
+Show Synology smart test progress or smart health and attributes.
 
 The script works in DSM 7, including DSM 7.2, and DSM 6.
+
+## Download the script
+
+1. Download the latest version _Source code (zip)_ from https://github.com/007revad/Synology_SMART_info/releases
+2. Save the download zip file to a folder on the Synology.
+3. Unzip the zip file.
+
+## How to run the script
+
+### Run the script via SSH
+
+[How to enable SSH and login to DSM via SSH](https://kb.synology.com/en-global/DSM/tutorial/How_to_login_to_DSM_with_root_permission_via_SSH_Telnet)
+
+Run the script:
+
+```bash
+sudo -s /volume1/scripts/syno_smart_info.sh
+```
+
+> **Note** <br>
+> Replace /volume1/scripts/ with the path to where the script is located.
+
+To see all the SMART attributes run the script with the -a or --all option:
+
+```bash
+sudo -s /volume1/scripts/syno_smart_info.sh --all
+```
+
+## Screenshots
+
+<p align="center">Clearing critical error for 2 drives</p>
+<p align="center"><img src="/images/script-4.png"></p>
+
 
