@@ -50,7 +50,7 @@ sudo -s /volume1/scripts/syno_smart_info.sh --all
 <p align="center">One drive marginal</p>
 <p align="center"><img src="/images/marginal.png"></p>
 
-<p align="center">HDD and SSD</p>
+<p align="center">HDD and SSD healthy</p>
 <p align="center"><img src="/images/hdd_ssd.png"></p>
 
 <p align="center">HDD and SSD when run with --all option</p>
