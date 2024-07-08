@@ -62,13 +62,19 @@ There are optional flags you can use when running the script:
 ## Screenshots
 
 <p align="center">All healthy</p>
-<p align="center"><img src="/images/all_good.png"></p>
+<p align="center"><img src="/images/webber_wd.png"></p>
 
 <p align="center">One drive marginal</p>
-<p align="center"><img src="/images/marginal.png"></p>
+<p align="center"><img src="/images/oscar_seagate.png"></p>
 
-<p align="center">HDD and SSD healthy</p>
-<p align="center"><img src="/images/hdd_ssd.png"></p>
+<p align="center">UDMA CRC Errors</p>
+<p align="center"><img src="/images/webber_udma_errors.png"></p>
+
+<p align="center">NVMe drives removed while NAS was running</p>
+<p align="center"><img src="/images/oscar_wd_nvme.png"></p>
+
+<p align="center">SSD with reallocated sectors</p>
+<p align="center"><img src="/images/senna.png"></p>
 
 <p align="center">HDD and SSD when run with --all option</p>
 <p align="center"><img src="/images/hdd_ssd_all.png"></p>
