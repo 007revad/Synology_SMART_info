@@ -1,18 +1,36 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2317
 #------------------------------------------------------------------------------
 # Show Synology smart test progress or smart health and attributes
+#
+# GitHub: https://github.com/007revad/Synology_SMART_info
+# Script verified at https://www.shellcheck.net/
+#
+# To run in a shell (replace /volume1/scripts/ with path to script):
+# sudo /volume1/scripts/syno_smart_info.sh
 #------------------------------------------------------------------------------
+# References:
 # https://www.backblaze.com/blog/hard-drive-smart-stats/
 # https://www.backblaze.com/blog/what-smart-stats-indicate-hard-drive-failures/
 # https://www.backblaze.com/blog/making-sense-of-ssd-smart-stats/
 #------------------------------------------------------------------------------
+# References for converting Seagate raw values:
+# https://codeberg.org/SWEETGOOD/shell-scripts#parse-raw-smart-values-seagate-sh
+# https://codeberg.org/SWEETGOOD/shell-scripts/raw/branch/main/parse-raw-smart-values-seagate.sh
+#
+# online Seagate SMART value convertor
+# https://www.disktuna.com/seagate-raw-smart-attributes-to-error-convertertest/#102465319
+#------------------------------------------------------------------------------
 
-scriptver="v1.0.3"
+scriptver="v1.1.6"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
 # Get NAS model
 model=$(cat /proc/sys/kernel/syno_hw_version)
+
+# Get NAS hostname
+host_name=$(hostname)
 
 # Get DSM full version
 productversion=$(/usr/syno/bin/synogetkeyvalue /etc.defaults/VERSION productversion)
@@ -22,6 +40,9 @@ smallfixnumber=$(/usr/syno/bin/synogetkeyvalue /etc.defaults/VERSION smallfixnum
 
 # Get DSM major version
 dsm=$(get_key_value /etc.defaults/VERSION majorversion)
+
+# Get smartctl location
+smartctl=$(which smartctl)
 
 ding(){ 
     printf \\a
@@ -40,7 +61,7 @@ Options:
   -v, --version         Show the script version
 
 EOF
-    exit 0
+    exit 1
 }
 
 scriptversion(){ 
@@ -99,7 +120,7 @@ if [[ $color != "no" ]]; then
     #Red='\e[0;31m'       # ${Red}
     LiteRed='\e[1;31m'    # ${LiteRed}
     #Green='\e[0;32m'     # ${Green}
-    #LiteGreen='\e[0;32m' # ${LiteGreen}
+    LiteGreen='\e[1;32m'  # ${LiteGreen}
     Yellow='\e[0;33m'     # ${Yellow}
     #Blue='\e[0;34m'      # ${Blue}
     #Purple='\e[0;35m'    # ${Purple}
@@ -122,10 +143,10 @@ fi
 #echo -e "$script $scriptver\ngithub.com/$repo\n"
 echo "$script $scriptver - by 007revad"
 
-# Show DSM full version and model
+# Show hostname, model and DSM full version
 if [[ $buildphase == GM ]]; then buildphase=""; fi
 if [[ $smallfixnumber -gt "0" ]]; then smallfix="-$smallfixnumber"; fi
-echo -e "${model} DSM $productversion-$buildnumber$smallfix $buildphase"
+echo -e "$host_name $model DSM $productversion-$buildnumber$smallfix $buildphase"
 
 # Show options used
 if [[ ${#args[@]} -gt "0" ]]; then
@@ -157,6 +178,37 @@ fi
 
 #------------------------------------------------------------------------------
 
+get_drive_num(){ 
+    # Get Drive number
+    disk_id=""
+    disk_id=$(synodisk --get_location_form "/dev/$drive" | grep 'Disk id' | awk '{print $NF}')
+    #if [[ $disk_id -gt "9" ]]; then
+        drive_num="Drive $disk_id  "
+    #else
+    #    drive_num="Drive $disk_id   "
+    #fi
+}
+
+get_nvme_num(){ 
+    # Get M.2 Drive number
+    pcislot=""
+    cardslot=""
+    if nvme=$(synonvme --get-location "/dev/$drive"); then
+        if [[ ! $nvme =~ "PCI Slot: 0" ]]; then
+            pcislot="$(echo "$nvme" | cut -d"," -f2 | awk '{print $NF}')-"
+        fi
+        cardslot="$(echo "$nvme" | awk '{print $NF}')"
+    else
+        pcislot="$(basename -- "$drive")"
+        cardslot=""
+    fi
+    #if [[ -n $pcislot ]]; then
+        drive_num="M.2 Drive $pcislot$cardslot  "
+    #else
+    #    drive_num="M.2 Drive $pcislot$cardslot    "
+    #fi
+}
+
 show_drive_model(){ 
     # Get drive model
     # $drive is sata1 or sda or usb1 etc
@@ -171,8 +223,15 @@ show_drive_model(){
     fi
     serial=$(printf "%s" "$serial" | xargs)  # trim leading and trailing white space
 
+    # Get drive serial number with smartctl for USB drives
+#    if [[ -z "$serial" && "${drive:0:4}" != "nvme" ]]; then
+    if [[ -z "$serial" ]]; then
+        serial=$(smartctl -i -d sat /dev/"$drive" | grep Serial | cut -d":" -f2 | xargs)
+    fi
+
     # Show drive model and serial
-    echo -e "\n${Cyan}$model${Off} ${Yellow}$serial${Off}"
+    #echo -e "\n${Cyan}${drive_num}${Off}$model  ${Yellow}$serial${Off}"
+    echo -e "\n${Cyan}${drive_num}${Off}$model  $serial"
 }
 
 smart_all(){ 
@@ -192,15 +251,31 @@ smart_all(){
                 # Highlight indicators of drive failure
                 echo -e "${Yellow}${strOut}${Off}"
             else
-                echo "$strOut"
+                echo "$strIn"
             fi
         fi
     done
 }
 
+short_attibutes(){ 
+    if [[ "$strIn" ]]; then
+        var1=$(echo "$strIn" | awk '{printf "%-28s", $2}')
+        var2=$(echo "$strIn" | awk '{printf $10}' | awk -F"+" '{print $1}' | cut -d"h" -f1)
+        if [[ ${var2:0:1} -gt "0" && $2 == "zero" ]]; then
+            echo -e "$1 ${Yellow}$var1${Off} ${LiteRed}$var2${Off}"
+        elif [[ ${var2:0:1} -gt "0" && $2 == "none" ]]; then
+            echo -e "$1 $var1 $var2"
+        else
+            echo -e "$1 ${Yellow}$var1${Off} $var2"
+        fi
+    fi
+}
+
 show_health(){
-    # Show drive health
     # $drive is sata1 or sda or usb1 etc
+    local att194
+
+    # Show drive overall health
     readarray -t health_array < <(smartctl -H -d sat -T permissive /dev/"$drive" | tail -n +5)
     for strIn in "${health_array[@]}"; do
         if echo "$strIn" | awk '{print $1}' | grep -E '[0-9]' >/dev/null ||\
@@ -218,18 +293,84 @@ show_health(){
             echo "$strOut"
         else
             if [[ -n "$strIn" ]]; then  # Don't echo blank line
-                echo "$strIn"
+                if $(echo "$strIn" | grep -qi PASSED); then
+                    echo -e "SMART overall-health self-assessment test result: ${LiteGreen}PASSED${Off}"
+                else
+                    echo "$strIn"
+                fi
             fi
         fi
     done
 
     # Show error counter
-    smartctl -l error /dev/"$drive" | grep -iE 'error.*logg'
+    #smartctl -l error /dev/"$drive" | grep -iE 'error.*logg'
 
-    # Show SMART attributes if health != passed
+    # Retrieve Error Log and show error count
+    errlog="$(smartctl -l error /dev/"$drive" | grep -iE 'error.*logg')"
+    errcount="$(echo "$errlog" | awk '{print $3}')"
+    #echo "$errlog"
+    if [[ $errcount -gt "0" ]]; then
+    #if [[ $errcount -eq "0" ]]; then  # debug
+        errtotal=$((errtotal +"$errcount"))
+        echo -e "SMART Error Counter Log:         ${LiteRed}$errcount${Off}"
+    else
+        echo -e "SMART Error Counter Log:         ${LiteGreen}No Errors Logged${Off}"
+    fi
+
+    # Show SMART attributes
     health=$(smartctl -H -d sat -T permissive /dev/"$drive" | tail -n +5)
     if ! echo "$health" | grep PASSED >/dev/null || [[ $all == "yes" ]]; then
+        # Show all SMART attributes if health != passed
         smart_all
+    else
+        # Show only important SMART attributes
+        readarray -t smart_atts < <(smartctl -A -d sat /dev/"$drive")
+        # Decide if show airflow temperature
+        if echo "${smart_atts[*]}" | grep -c '194 Temp' >/dev/null; then
+            att194=yes
+        fi
+        for strIn in "${smart_atts[@]}"; do
+            if [[ ${strIn:0:3} == "  1" ]]; then
+                DEVICE=$(smartctl -A -i /dev/"$drive" | awk -F ' ' '/Device Model/{print $3}')
+                if [[ "${DEVICE:0:2}" != "ST" ]]; then  # I don't want to convert Seagate values
+                    # 1 Raw read error rate
+                    short_attibutes "  1"
+                fi
+            elif [[ ${strIn:0:3} == "  5" ]]; then
+                # 5 Reallocated sectors - scrutiny and BackBlaze
+                short_attibutes "  5" zero
+            elif [[ ${strIn:0:3} == "  9" ]]; then
+                # 9 Power on hours
+                short_attibutes "  9" none
+            elif [[ ${strIn:0:3} == " 10" ]]; then
+                # 10 Spin_Retry_Count - scrutiny
+                short_attibutes " 10" none
+            elif [[ ${strIn:0:3} == "187" ]]; then
+                # 187 Current pending sectors - BackBlaze
+                short_attibutes "187" zero
+            elif [[ ${strIn:0:3} == "188" ]]; then
+                # 188 Current pending sectors - BackBlaze
+                short_attibutes "188" zero
+            elif [[ ${strIn:0:3} == "190" && -z $att194 ]]; then
+                # 190 Airflow_Temperature
+                short_attibutes "190" none
+            elif [[ ${strIn:0:3} == "194" ]]; then
+                # 194 Temperature - scrutiny
+                short_attibutes "194" none
+            elif [[ ${strIn:0:3} == "197" ]]; then
+                # 197 Current pending sectors - scrutiny and BackBlaze
+                short_attibutes "197" zero
+            elif [[ ${strIn:0:3} == "198" ]]; then
+                # 198 Offline uncorrectable - scrutiny and BackBlaze
+                short_attibutes "198" zero
+            elif [[ ${strIn:0:3} == "199" ]]; then
+                # 199 UDMA_CRC_Error_Count
+                short_attibutes "199" zero
+            elif [[ ${strIn:0:3} == "200" ]]; then
+                # 200 Multi_Zone_Error_Rate - WD
+                short_attibutes "200" zero
+            fi
+        done
     fi
 }
 
@@ -239,11 +380,13 @@ smart_nvme(){
         # Retrieve Error Log and show error count
         errlog="$(nvme error-log "/dev/$drive" | grep error_count | uniq)"
         errcount="$(echo "$errlog" | awk '{print $3}')"
+        #echo "$errlog"
         if [[ $errcount -gt "0" ]]; then
+        #if [[ $errcount -eq "0" ]]; then  # debug
             errtotal=$((errtotal +"$errcount"))
-            echo -e "SMART Errors Logged: ${LiteRed}$errcount${Off}"
+            echo -e "SMART Error Counter Log:         ${LiteRed}$errcount${Off}"
         else
-            echo "No SMART Errors Logged"
+            echo -e "SMART Error Counter Log:         ${LiteGreen}No Errors Logged${Off}"
         fi
     elif [[ $1 == "smart-log" ]]; then
         # Retrieve SMART Log
@@ -257,6 +400,50 @@ smart_nvme(){
         # Retrieve the SELF-TEST Log
         nvme self-test-log "/dev/$drive"    # Does not work
     fi
+}
+
+short_attibutes_nvme(){ 
+    if [[ "$strIn" ]]; then
+        var1="$3"
+        var2=$(echo "$strIn" | cut -d":" -f2 | xargs)
+        if [[ ${var2:0:1} -gt "0" && $2 == "zero" ]]; then
+            echo -e "${Yellow}$var1${Off} ${LiteRed}$var2${Off}"
+        elif [[ ${var2:0:1} -gt "0" && $2 == "none" ]]; then
+            echo -e "$var1 $var2"
+        else
+            echo -e "${Yellow}$var1${Off} $var2"
+        fi
+    fi
+}
+
+show_health_nvme(){ 
+    # $drive is nvme0 etc
+
+    # Show only important SMART attributes
+    readarray -t smart_atts < <(nvme smart-log /dev/"$drive")
+    for strIn in "${smart_atts[@]}"; do
+        nvme_att="$(echo "$strIn" | cut -d":" -f1 | xargs)"
+
+        if [[ $nvme_att == "critical_warning" ]]; then
+            # 1 Critical_Warning
+            short_attibutes_nvme "critical_warning" zero "  1 Critical_Warning            "
+        elif [[ $nvme_att == "temperature" ]]; then
+            # 2 Temperature - scrutiny
+            short_attibutes_nvme "temperature" none "  2 Temperature                 "
+        elif [[ $nvme_att == "percentage_used" ]]; then
+            # 5 Percentage Used
+            short_attibutes_nvme "percentage_used" none "  5 Percentage Used             "
+        elif [[ $nvme_att == "power_on_hours" ]]; then
+            # 12 Power On Hours
+            short_attibutes_nvme "power_on_hours" none " 12 Power On Hours              "
+        elif [[ $nvme_att == "unsafe_shutdowns" ]]; then
+            # 13 Unsafe Shutdowns
+            short_attibutes_nvme "unsafe_shutdowns" zero " 13 Unsafe Shutdowns            "
+        elif [[ $nvme_att == "media_errors" ]]; then
+            # 14 Media Errors
+            short_attibutes_nvme "media_errors" zero " 14 Media Errors                "
+        fi
+    done
 }
 
 
@@ -284,18 +471,20 @@ for d in /sys/block/*; do
                 drives+=("$(basename -- "${d}")")
             fi
         ;;
-        usb*)
-            if [[ $d =~ usb[0-9]?[0-9]?$ ]]; then
-                drives+=("$(basename -- "${d}")")
-            fi
-        ;;
+        #usb*)
+        #    if [[ $d =~ usb[0-9]?[0-9]?$ ]]; then
+        #        drives+=("$(basename -- "${d}")")
+        #    fi
+        #;;
     esac
 done
 
+if [[ -z "$errtotal" ]]; then errtotal=0 ; fi
 
 # HDD and SSD
 for drive in "${drives[@]}"; do
     # Show drive model and serial
+    get_drive_num
     show_drive_model
 
     # Show SATA/SAS drive SMART info
@@ -326,15 +515,21 @@ for drive in "${drives[@]}"; do
     fi
 done
 
-# NVMe
+# NVMe drives
 for drive in "${nvmes[@]}"; do
     # Show drive model and serial
+    get_nvme_num
     show_drive_model
 
     smart_nvme error-log
     if [[ $errcount -gt "0" ]]; then
         errtotal=$((errtotal +"$errcount"))
     fi
+
+    # Show important smart values
+    show_health_nvme
+
+    # Show important smart values
     if [[ $errcount -gt "0" ]] || [[ $all == "yes" ]]; then
         smart_nvme smart-log        
     fi
