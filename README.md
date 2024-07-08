@@ -67,6 +67,9 @@ There are optional flags you can use when running the script:
 <p align="center">One drive marginal</p>
 <p align="center"><img src="/images/oscar_seagate.png"></p>
 
+<p align="center">UDMA CRC Errors</p>
+<p align="center"><img src="/images/webber_udma_errors.png"></p>
+
 <p align="center">NVMe drives removed while NAS was running</p>
 <p align="center"><img src="/images/oscar_wd_nvme.png"></p>
 
