@@ -1,6 +1,6 @@
 v1.1.6
 - Added green PASSED if drive is okay.
-- Now shows all the important SMART attritbutes values.
+- Now shows all the important SMART attribute values.
 - Now shows the DSM Drive number or M.2 Drive number so you can more easily identify which drive is which.
 - Now shows the hostname as well as Synology model and DSM version (in case you have multiple of the same model).
 - Now gets USB drive's serial number.
