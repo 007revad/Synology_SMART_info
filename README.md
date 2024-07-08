@@ -70,6 +70,9 @@ There are optional flags you can use when running the script:
 <p align="center">NVMe drives removed while NAS was running</p>
 <p align="center"><img src="/images/oscar_wd_nvme.png"></p>
 
+<p align="center">SSD with reallocated sectors</p>
+<p align="center"><img src="/images/senna.png"></p>
+
 <p align="center">HDD and SSD when run with --all option</p>
 <p align="center"><img src="/images/hdd_ssd_all.png"></p>
 
