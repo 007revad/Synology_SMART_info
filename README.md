@@ -67,8 +67,8 @@ There are optional flags you can use when running the script:
 <p align="center">One drive marginal</p>
 <p align="center"><img src="/images/oscar_seagate.png"></p>
 
-<p align="center">HDD and SSD healthy</p>
-<p align="center"><img src="/images/hdd_ssd.png"></p>
+<p align="center">NVMe drives removed while NAS was running</p>
+<p align="center"><img src="/images/oscar_wd_nvme.png"></p>
 
 <p align="center">HDD and SSD when run with --all option</p>
 <p align="center"><img src="/images/hdd_ssd_all.png"></p>
