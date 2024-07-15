@@ -22,7 +22,7 @@
 # https://www.disktuna.com/seagate-raw-smart-attributes-to-error-convertertest/#102465319
 #------------------------------------------------------------------------------
 
-scriptver="v1.1.6"
+scriptver="v1.1.7"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -311,7 +311,7 @@ show_health(){
     #echo "$errlog"
     if [[ $errcount -gt "0" ]]; then
     #if [[ $errcount -eq "0" ]]; then  # debug
-        errtotal=$((errtotal +"$errcount"))
+        errtotal=$((errtotal +errcount))
         echo -e "SMART Error Counter Log:         ${LiteRed}$errcount${Off}"
     else
         echo -e "SMART Error Counter Log:         ${LiteGreen}No Errors Logged${Off}"
@@ -383,7 +383,7 @@ smart_nvme(){
         #echo "$errlog"
         if [[ $errcount -gt "0" ]]; then
         #if [[ $errcount -eq "0" ]]; then  # debug
-            errtotal=$((errtotal +"$errcount"))
+            errtotal=$((errtotal +errcount))
             echo -e "SMART Error Counter Log:         ${LiteRed}$errcount${Off}"
         else
             echo -e "SMART Error Counter Log:         ${LiteGreen}No Errors Logged${Off}"
@@ -523,7 +523,7 @@ for drive in "${nvmes[@]}"; do
 
     smart_nvme error-log
     if [[ $errcount -gt "0" ]]; then
-        errtotal=$((errtotal +"$errcount"))
+        errtotal=$((errtotal +errcount))
     fi
 
     # Show important smart values
