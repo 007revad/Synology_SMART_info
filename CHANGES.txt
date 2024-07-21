@@ -1,3 +1,6 @@
+v1.2.8
+- Enabled support for USB HDDs and SSD drives (skips USB flash drives).
+
 v1.1.7
 - Bug fix for bash 4.3 (DSM 6).
 
