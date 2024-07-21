@@ -180,17 +180,21 @@ fi
 
 get_drive_num(){ 
     # Get Drive number
+    drive_num=""
     disk_id=""
     disk_id=$(synodisk --get_location_form "/dev/$drive" | grep 'Disk id' | awk '{print $NF}')
-    #if [[ $disk_id -gt "9" ]]; then
+    disk_cnr=""
+    disk_cnr=$(synodisk --get_location_form "/dev/$drive" | grep 'Disk cnr:' | awk '{print $NF}')
+    if [[ $disk_cnr -eq "4" ]]; then
+        drive_num="USB Drive  "
+    else
         drive_num="Drive $disk_id  "
-    #else
-    #    drive_num="Drive $disk_id   "
-    #fi
+    fi
 }
 
 get_nvme_num(){ 
     # Get M.2 Drive number
+    drive_num=""
     pcislot=""
     cardslot=""
     if nvme=$(synonvme --get-location "/dev/$drive"); then
@@ -202,18 +206,14 @@ get_nvme_num(){
         pcislot="$(basename -- "$drive")"
         cardslot=""
     fi
-    #if [[ -n $pcislot ]]; then
-        drive_num="M.2 Drive $pcislot$cardslot  "
-    #else
-    #    drive_num="M.2 Drive $pcislot$cardslot    "
-    #fi
+    drive_num="M.2 Drive $pcislot$cardslot  "
 }
 
 show_drive_model(){ 
     # Get drive model
     # $drive is sata1 or sda or usb1 etc
-    vendor=$(cat "/sys/block/$drive/device/vendor")
-    vendor=$(printf "%s" "$vendor" | xargs)  # trim leading and trailing white space
+    #vendor=$(cat "/sys/block/$drive/device/vendor")
+    #vendor=$(printf "%s" "$vendor" | xargs)  # trim leading and trailing white space
 
     model=$(cat "/sys/block/$drive/device/model")
     model=$(printf "%s" "$model" | xargs)  # trim leading and trailing white space
@@ -234,8 +234,8 @@ show_drive_model(){
 
     # Show drive model and serial
     #echo -e "\n${Cyan}${drive_num}${Off}$model  ${Yellow}$serial${Off}"
-    #echo -e "\n${Cyan}${drive_num}${Off}$model  $serial"
-    echo -e "\n${Cyan}${drive_num}${Off}$vendor $model  $serial"
+    echo -e "\n${Cyan}${drive_num}${Off}$model  $serial"
+    #echo -e "\n${Cyan}${drive_num}${Off}$vendor $model  $serial"
 }
 
 smart_all(){ 
