@@ -212,6 +212,9 @@ get_nvme_num(){
 show_drive_model(){ 
     # Get drive model
     # $drive is sata1 or sda or usb1 etc
+    vendor=$(cat "/sys/block/$drive/device/vendor")
+    vendor=$(printf "%s" "$vendor" | xargs)  # trim leading and trailing white space
+
     model=$(cat "/sys/block/$drive/device/model")
     model=$(printf "%s" "$model" | xargs)  # trim leading and trailing white space
 
@@ -231,7 +234,8 @@ show_drive_model(){
 
     # Show drive model and serial
     #echo -e "\n${Cyan}${drive_num}${Off}$model  ${Yellow}$serial${Off}"
-    echo -e "\n${Cyan}${drive_num}${Off}$model  $serial"
+    #echo -e "\n${Cyan}${drive_num}${Off}$model  $serial"
+    echo -e "\n${Cyan}${drive_num}${Off}$vendor $model  $serial"
 }
 
 smart_all(){ 
