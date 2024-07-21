@@ -22,7 +22,7 @@
 # https://www.disktuna.com/seagate-raw-smart-attributes-to-error-convertertest/#102465319
 #------------------------------------------------------------------------------
 
-scriptver="v1.1.7"
+scriptver="v1.2.8"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -446,6 +446,15 @@ show_health_nvme(){
     done
 }
 
+not_flash_drive(){ 
+    # $1 is /sys/block/sata1 /sys/block/usb1 etc
+    # Check if drive is flash drive (not supported by smartctl)
+    removable=$(cat "${1}/removable")
+    capability=$(cat "${1}/capability")
+    if [[ $removable == "1" ]] && [[ $capability == "51" ]]; then
+        return 1
+    fi
+}
 
 # Add drives to drives array
 for d in /sys/block/*; do
@@ -453,7 +462,9 @@ for d in /sys/block/*; do
     case "$(basename -- "${d}")" in
         sd*|hd*)
             if [[ $d =~ [hs]d[a-z][a-z]?$ ]]; then
-                drives+=("$(basename -- "${d}")")
+                if not_flash_drive "$d"; then
+                    drives+=("$(basename -- "${d}")")
+                fi
             fi
         ;;
         sata*|sas*)
@@ -471,11 +482,13 @@ for d in /sys/block/*; do
                 drives+=("$(basename -- "${d}")")
             fi
         ;;
-        #usb*)
-        #    if [[ $d =~ usb[0-9]?[0-9]?$ ]]; then
-        #        drives+=("$(basename -- "${d}")")
-        #    fi
-        #;;
+        usb*)
+            if [[ $d =~ usb[0-9]?[0-9]?$ ]]; then
+                if not_flash_drive "$d"; then
+                    drives+=("$(basename -- "${d}")")
+                fi
+            fi
+        ;;
     esac
 done
 
