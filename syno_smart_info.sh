@@ -22,7 +22,7 @@
 # https://www.disktuna.com/seagate-raw-smart-attributes-to-error-convertertest/#102465319
 #------------------------------------------------------------------------------
 
-scriptver="v1.2.8"
+scriptver="v1.2.9"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -460,14 +460,27 @@ not_flash_drive(){
     fi
 }
 
+is_usb(){ 
+    # $1 is /dev/sda or /sys/block/sda etc
+    if realpath /sys/block/"$(basename "$1")" | grep -q usb; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # Add drives to drives array
 for d in /sys/block/*; do
     # $d is /sys/block/sata1 etc
     case "$(basename -- "${d}")" in
         sd*|hd*)
             if [[ $d =~ [hs]d[a-z][a-z]?$ ]]; then
-                if not_flash_drive "$d"; then
-                    drives+=("$(basename -- "${d}")")
+                if is_usb "$d"; then  # Add USB drives except flash drives
+                    if not_flash_drive "$d"; then
+                        drives+=("$(basename -- "${d}")")
+                    fi
+                else
+                    drives+=("$(basename -- "${d}")")  # Add all other drives
                 fi
             fi
         ;;
