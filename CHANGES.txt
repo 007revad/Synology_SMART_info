@@ -1,3 +1,6 @@
+v1.2.9
+- Bug fix for skipping some drives in models that use sad, sdb etc.  Issue #9
+
 v1.2.8
 - Enabled support for USB HDDs and SSD drives (skips USB flash drives).
 
