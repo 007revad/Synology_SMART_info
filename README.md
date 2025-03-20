@@ -59,6 +59,16 @@ There are optional flags you can use when running the script:
   -v, --version         Show the script version
 ```
 
+## Optional for Seagate drives
+
+If you have Seagate drives you should install [SynoCommunity's	SynoCli Disk Tools v4.0-13 or later](https://synocommunity.com/package/synocli-disk) so this script can decode the values of Seagate's SMART attributes 1, 7 and 195.
+
+<p align="center">Seagate HDD with DSM's smartctl 6.5</p>
+<p align="center"><img src="/images/seagate_smartctl_6.png"></p>
+
+<p align="center">Seagate HDD with SynoCommunity's smartctl 7.4</p>
+<p align="center"><img src="/images/seagate_smartctl_7.png"></p>
+
 ## Screenshots
 
 <p align="center">All healthy</p>
