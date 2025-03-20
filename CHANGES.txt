@@ -1,3 +1,10 @@
+v1.3.10
+- Added support for decoding Seagate SMART attributes 1, 7 and 195 if smartctl is v7 is installed.
+  - Installing the Syno Community's "SynoCli Disk Tools v4.0-13" or later package to install smartctl v7.4
+  - Download the latest SynoCli Disk Tools package from https://synocommunity.com/package/synocli-disk
+- Changed to exit with code greater than zero if any SMART attributes' values are greater than 0 (for those that should be 0).
+  - Useful when script is scheduled with "Send run details by email" and "Send run details only when the script terminates abnormally" are ticked.
+
 v1.2.9
 - Bug fix for skipping some drives in models that use sda, sdb etc.  Issue #9
 
