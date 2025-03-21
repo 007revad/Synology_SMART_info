@@ -22,7 +22,7 @@
 # https://www.disktuna.com/seagate-raw-smart-attributes-to-error-convertertest/#102465319
 #------------------------------------------------------------------------------
 
-scriptver="v1.2.9"
+scriptver="v1.3.10"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -41,8 +41,14 @@ smallfixnumber=$(/usr/syno/bin/synogetkeyvalue /etc.defaults/VERSION smallfixnum
 # Get DSM major version
 dsm=$(get_key_value /etc.defaults/VERSION majorversion)
 
-# Get smartctl location
-smartctl=$(which smartctl)
+# Get smartctl location and check if version 7
+if which smartctl7 >/dev/null; then
+    # smartmontools 7 from SynoCli Disk Tools is installed
+    smartctl=$(which smartctl7)
+    smartversion=7
+else
+    smartctl=$(which smartctl)
+fi
 
 ding(){ 
     printf \\a
@@ -147,6 +153,7 @@ echo "$script $scriptver - by 007revad"
 if [[ $buildphase == GM ]]; then buildphase=""; fi
 if [[ $smallfixnumber -gt "0" ]]; then smallfix="-$smallfixnumber"; fi
 echo -e "$host_name $model DSM $productversion-$buildnumber$smallfix $buildphase"
+echo "Using smartctl $("$smartctl" --version | head -1 | awk '{print $2}')"
 
 # Show options used
 if [[ ${#args[@]} -gt "0" ]]; then
@@ -229,7 +236,7 @@ show_drive_model(){
     # Get drive serial number with smartctl for USB drives
 #    if [[ -z "$serial" && "${drive:0:4}" != "nvme" ]]; then
     if [[ -z "$serial" ]]; then
-        serial=$(smartctl -i -d sat /dev/"$drive" | grep Serial | cut -d":" -f2 | xargs)
+        serial=$("$smartctl" -i -d sat /dev/"$drive" | grep Serial | cut -d":" -f2 | xargs)
     fi
 
     # Show drive model and serial
@@ -242,7 +249,11 @@ smart_all(){
     # Show all SMART attributes
     # $drive is sata1 or sda or usb1 etc
     echo ""
-    readarray -t att_array < <(smartctl -A -f brief -d sat -T permissive "/dev/$drive" | tail -n +7)
+    if [[ $seagate == "yes" ]] && [[ $smartversion == 7 ]]; then
+        readarray -t att_array < <("$smartctl" -A -f brief -d sat -T permissive -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 "/dev/$drive" | tail -n +7)
+    else
+        readarray -t att_array < <("$smartctl" -A -f brief -d sat -T permissive "/dev/$drive" | tail -n +7)
+    fi
     for strIn in "${att_array[@]}"; do
         # Remove lines containing ||||||_ to |______
         if ! echo "$strIn" | grep '|_' >/dev/null ; then
@@ -252,8 +263,11 @@ smart_all(){
             if [[ $check == 5 ]] || [[ $check == 10 ]] || [[ $check == 187 ]] || [[ $check == 188 ]] ||\
                 [[ $check == 196 ]] || [[ $check == 197 ]] || [[ $check == 198 ]];
             then
-                # Highlight indicators of drive failure
+                # Highlight indicators of drive failure in yellow
                 echo -e "${Yellow}${strOut}${Off}"
+            #if [[ $check == 1 ]] || [[ $check == 5 ]] || [[ $check == 7 ]]\
+            #    || [[ $check == 10 ]] || [[ $check == 187 ]] || [[ $check == 188 ]] ||\
+            #    [[ $check == 196 ]] || [[ $check == 197 ]] || [[ $check == 198 ]];
             else
                 echo "$strIn"
             fi
@@ -267,6 +281,9 @@ short_attibutes(){
         var2=$(echo "$strIn" | awk '{printf $10}' | awk -F"+" '{print $1}' | cut -d"h" -f1)
         if [[ ${var2:0:1} -gt "0" && $2 == "zero" ]]; then
             echo -e "$1 ${Yellow}$var1${Off} ${LiteRed}$var2${Off}"
+            if [[ $var2 -gt "0" ]]; then
+                warn=$((warn +1))
+            fi
         elif [[ ${var2:0:1} -gt "0" && $2 == "none" ]]; then
             echo -e "$1 $var1 $var2"
         else
@@ -280,7 +297,7 @@ show_health(){
     local att194
 
     # Show drive overall health
-    readarray -t health_array < <(smartctl -H -d sat -T permissive /dev/"$drive" | tail -n +5)
+    readarray -t health_array < <("$smartctl" -H -d sat -T permissive /dev/"$drive" | tail -n +5)
     for strIn in "${health_array[@]}"; do
         if echo "$strIn" | awk '{print $1}' | grep -E '[0-9]' >/dev/null ||\
            echo "$strIn" | awk '{print $1}' | grep 'ID#' >/dev/null ; then
@@ -307,10 +324,10 @@ show_health(){
     done
 
     # Show error counter
-    #smartctl -l error /dev/"$drive" | grep -iE 'error.*logg'
+    #"$smartctl" -l error /dev/"$drive" | grep -iE 'error.*logg'
 
     # Retrieve Error Log and show error count
-    errlog="$(smartctl -l error /dev/"$drive" | grep -iE 'error.*logg')"
+    errlog="$("$smartctl" -l error /dev/"$drive" | grep -iE 'error.*logg')"
     errcount="$(echo "$errlog" | awk '{print $3}')"
     #echo "$errlog"
     if [[ $errcount -gt "0" ]]; then
@@ -322,27 +339,47 @@ show_health(){
     fi
 
     # Show SMART attributes
-    health=$(smartctl -H -d sat -T permissive /dev/"$drive" | tail -n +5)
+    health=$("$smartctl" -H -d sat -T permissive /dev/"$drive" | tail -n +5)
     if ! echo "$health" | grep PASSED >/dev/null || [[ $all == "yes" ]]; then
         # Show all SMART attributes if health != passed
         smart_all
     else
         # Show only important SMART attributes
-        readarray -t smart_atts < <(smartctl -A -d sat /dev/"$drive")
+        if [[ $seagate == "yes" ]] && [[ $smartversion == 7 ]]; then
+            readarray -t smart_atts < <("$smartctl" -A -d sat -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 /dev/"$drive")
+        else
+            readarray -t smart_atts < <("$smartctl" -A -d sat /dev/"$drive")
+        fi
         # Decide if show airflow temperature
         if echo "${smart_atts[*]}" | grep -c '194 Temp' >/dev/null; then
             att194=yes
         fi
         for strIn in "${smart_atts[@]}"; do
             if [[ ${strIn:0:3} == "  1" ]]; then
-                DEVICE=$(smartctl -A -i /dev/"$drive" | awk -F ' ' '/Device Model/{print $3}')
-                if [[ "${DEVICE:0:2}" != "ST" ]]; then  # I don't want to convert Seagate values
-                    # 1 Raw read error rate
+                # 1 Raw read error rate
+                if [[ $seagate == "yes" ]]; then
+                    if [[ $smartversion == 7 ]]; then
+                        short_attibutes "  1" zero
+                    else
+                        short_attibutes "  1" none
+                    fi
+                else
                     short_attibutes "  1"
                 fi
             elif [[ ${strIn:0:3} == "  5" ]]; then
                 # 5 Reallocated sectors - scrutiny and BackBlaze
                 short_attibutes "  5" zero
+            elif [[ ${strIn:0:3} == "  7" ]]; then
+                # 7 Seek_Error_Rate
+                if [[ $seagate == "yes" ]]; then
+                    if [[ $smartversion == 7 ]]; then
+                        short_attibutes "  7" zero
+                    else
+                        short_attibutes "  7" none
+                    fi
+                else
+                    short_attibutes "  7"
+                fi
             elif [[ ${strIn:0:3} == "  9" ]]; then
                 # 9 Power on hours
                 short_attibutes "  9" none
@@ -361,6 +398,17 @@ show_health(){
             elif [[ ${strIn:0:3} == "194" ]]; then
                 # 194 Temperature - scrutiny
                 short_attibutes "194" none
+            elif [[ ${strIn:0:3} == "195" ]]; then
+                # 195 Hardware_ECC_Recovered aka ECC_On_the_Fly_Count
+                if [[ $seagate == "yes" ]]; then
+                    if [[ $smartversion == 7 ]]; then
+                        short_attibutes "  195" zero
+                    else
+                        short_attibutes "  195" none
+                    fi
+                else
+                    short_attibutes "  195"
+                fi
             elif [[ ${strIn:0:3} == "197" ]]; then
                 # 197 Current pending sectors - scrutiny and BackBlaze
                 short_attibutes "197" zero
@@ -469,6 +517,15 @@ is_usb(){
     fi
 }
 
+is_seagate(){
+    DEVICE=$("$smartctl" -A -i /dev/"$drive" | awk -F ' ' '/Device Model/{print $3}')
+    if [[ "${DEVICE:0:2}" == "ST" ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
+
 # Add drives to drives array
 for d in /sys/block/*; do
     # $d is /sys/block/sata1 etc
@@ -517,14 +574,21 @@ for drive in "${drives[@]}"; do
     get_drive_num
     show_drive_model
 
+    # Check if a Seagate drive
+    if is_seagate "$drive"; then
+        seagate="yes"
+    else
+        seagate=
+    fi
+
     # Show SATA/SAS drive SMART info
     if [[ $dsm -gt "6" ]]; then
         # DSM 7 or newer
 
         # Show SMART test status if SMART test running
-        percentleft=$(smartctl -a -d sat -T permissive /dev/"$drive" | grep "  Self-test routine in progress" | cut -d " " -f9-13)
+        percentleft=$("$smartctl" -a -d sat -T permissive /dev/"$drive" | grep "  Self-test routine in progress" | cut -d " " -f9-13)
         if [[ $percentleft ]]; then
-            hourselapsed=$(smartctl -a -d sat -T permissive /dev/"$drive" | grep "  Self-test routine in progress" | cut -d " " -f21)
+            hourselapsed=$("$smartctl" -a -d sat -T permissive /dev/"$drive" | grep "  Self-test routine in progress" | cut -d " " -f21)
             echo "Drive $model $serial $percentleft remaining, $hourselapsed hours elapsed."
         else
             # Show drive health
@@ -534,9 +598,9 @@ for drive in "${drives[@]}"; do
         # DSM 6 or older
 
         # Show SMART test status if SMART test running
-        percentdone=$(smartctl -a -d sat -T permissive /dev/"$drive" | grep "ScanStatus" | cut -d " " -f3-4)
+        percentdone=$("$smartctl" -a -d sat -T permissive /dev/"$drive" | grep "ScanStatus" | cut -d " " -f3-4)
         if [[ $percentdone ]]; then
-            hourselapsed=$(smartctl -a -d sat -T permissive /dev/"$drive" | grep "  Self-test routine in progress" | cut -d " " -f21)
+            hourselapsed=$("$smartctl" -a -d sat -T permissive /dev/"$drive" | grep "  Self-test routine in progress" | cut -d " " -f21)
             echo "Drive $model $serial ${percentdone}% done."
         else
             # Show drive health
@@ -566,6 +630,10 @@ for drive in "${nvmes[@]}"; do
 done
 
 echo -e "\nFinished\n"
+
+if [[ $warn -gt "0" ]]; then
+    errtotal=$((errtotal +warn))
+fi
 
 exit "$errtotal"
 
