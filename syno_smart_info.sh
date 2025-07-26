@@ -22,7 +22,7 @@
 # https://www.disktuna.com/seagate-raw-smart-attributes-to-error-convertertest/#102465319
 #------------------------------------------------------------------------------
 
-scriptver="v1.3.10"
+scriptver="v1.3.11"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -241,7 +241,7 @@ show_drive_model(){
 
     # Show drive model and serial
     #echo -e "\n${Cyan}${drive_num}${Off}$model  ${Yellow}$serial${Off}"
-    echo -e "\n${Cyan}${drive_num}${Off}$model  $serial"
+    echo -e "\n${Cyan}${drive_num}${Off}$model  $serial  /dev/$drive"
     #echo -e "\n${Cyan}${drive_num}${Off}$vendor $model  $serial"
 }
 
