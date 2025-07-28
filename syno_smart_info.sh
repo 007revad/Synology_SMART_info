@@ -22,7 +22,7 @@
 # https://www.disktuna.com/seagate-raw-smart-attributes-to-error-convertertest/#102465319
 #------------------------------------------------------------------------------
 
-scriptver="v1.3.11"
+scriptver="v1.3.12"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -186,14 +186,29 @@ fi
 #------------------------------------------------------------------------------
 
 get_drive_num(){ 
-    # Get Drive number
     drive_num=""
     disk_id=""
-    disk_id=$(synodisk --get_location_form "/dev/$drive" | grep 'Disk id' | awk '{print $NF}')
     disk_cnr=""
+    disk_cnridx=""
+    eunit_num=""
+    eunit_model=""
+    eunit=""
+    # Get Drive number
+    disk_id=$(synodisk --get_location_form "/dev/$drive" | grep 'Disk id:' | awk '{print $NF}')
     disk_cnr=$(synodisk --get_location_form "/dev/$drive" | grep 'Disk cnr:' | awk '{print $NF}')
+    disk_cnridx=$(synodisk --get_location_form "/dev/$drive" | grep 'Disk cnridx:' | awk '{print $NF}')
+
+    # Get eunit model and port number
+    if [[ $disk_cnridx -gt "0" ]]; then
+        eunit_num="$disk_cnridx"
+        eunit_model=$(syno_slot_mapping "/dev/$drive" | grep "Eunit port $disk_cnridx" | awk '{print $NF}')
+        eunit="(${eunit_model}-$eunit_num)"
+    fi
+
     if [[ $disk_cnr -eq "4" ]]; then
         drive_num="USB Drive  "
+    elif [[ $eunit ]]; then
+        drive_num="Drive $disk_id $eunit  "
     else
         drive_num="Drive $disk_id  "
     fi
