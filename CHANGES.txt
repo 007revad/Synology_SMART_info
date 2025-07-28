@@ -1,3 +1,6 @@
+v1.3.12
+- Changed to show expansion unit model and port number if drive is in an expansion unit.
+
 v1.3.11
 - Changed to also show device name (/dev/sata1, /dev/sda, /dev/nvme0n1 etc).
 
