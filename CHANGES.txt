@@ -1,3 +1,6 @@
+v1.3.13
+- Bug fix for "195 Hardware_ECC_Recovered" incorrectly being padded with 2 leading spaces as "  195 Hardware_ECC_Recovered".
+
 v1.3.12
 - Changed to show expansion unit model and port number if drive is in an expansion unit.
 
