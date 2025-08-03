@@ -22,7 +22,7 @@
 # https://www.disktuna.com/seagate-raw-smart-attributes-to-error-convertertest/#102465319
 #------------------------------------------------------------------------------
 
-scriptver="v1.3.12"
+scriptver="v1.3.13"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -417,12 +417,12 @@ show_health(){
                 # 195 Hardware_ECC_Recovered aka ECC_On_the_Fly_Count
                 if [[ $seagate == "yes" ]]; then
                     if [[ $smartversion == 7 ]]; then
-                        short_attibutes "  195" zero
+                        short_attibutes "195" zero
                     else
-                        short_attibutes "  195" none
+                        short_attibutes "195" none
                     fi
                 else
-                    short_attibutes "  195"
+                    short_attibutes "195"
                 fi
             elif [[ ${strIn:0:3} == "197" ]]; then
                 # 197 Current pending sectors - scrutiny and BackBlaze
