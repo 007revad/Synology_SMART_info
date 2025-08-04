@@ -22,7 +22,7 @@
 # https://www.disktuna.com/seagate-raw-smart-attributes-to-error-convertertest/#102465319
 #------------------------------------------------------------------------------
 
-scriptver="v1.3.13"
+scriptver="v1.3.14"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -260,32 +260,112 @@ show_drive_model(){
     #echo -e "\n${Cyan}${drive_num}${Off}$vendor $model  $serial"
 }
 
+# Python-based SMART attribute formatting function using EOF method
+print_colored_smart_attribute() {
+    local line="$1"
+    [[ -z "$line" ]] && return
+    
+    # Pass color disable option to Python
+    local color_opt="1"
+    if [[ $color == "no" ]]; then
+        color_opt="0"
+    fi
+    
+    # Execute Python script using HERE document
+    echo "$line" | python3 -c "
+import sys
+import re
+
+def format_smart_line():
+    line = sys.stdin.read().strip()
+    color_enabled = bool(int('$color_opt'))
+    
+    if not line:
+        return
+    
+    YELLOW = '\033[0;33m'
+    OFF = '\033[0m'
+    COLOR_IDS = {5, 10, 187, 188, 196, 197, 198}
+    
+    fields = line.split()
+    if len(fields) < 6:
+        print(line)
+        return
+    
+    try:
+        id_field = fields[0]
+        id_num = int(id_field)
+    except ValueError:
+        print(line)
+        return
+    
+    flags_pattern = re.compile(r'^[POSRCK-]{6}$')
+    flags_idx = -1
+    
+    for i, field in enumerate(fields[1:], 1):
+        if flags_pattern.match(field):
+            flags_idx = i
+            break
+    
+    if flags_idx == -1 or len(fields) < flags_idx + 5:
+        print(line)
+        return
+    
+    attr_name = ' '.join(fields[1:flags_idx])
+    flags = fields[flags_idx]
+    value = fields[flags_idx + 1]
+    worst = fields[flags_idx + 2] 
+    thresh = fields[flags_idx + 3]
+    fail = fields[flags_idx + 4]
+    raw_value = ' '.join(fields[flags_idx + 5:]) if len(fields) > flags_idx + 5 else ''
+    
+    formatted_line = f'{id_field:<4} {attr_name:<32} {flags:<8} {value:>6} {worst:>6} {thresh:>7} {fail:>6} {raw_value}'
+    
+    if color_enabled and id_num in COLOR_IDS:
+        print(f'{YELLOW}{formatted_line}{OFF}')
+    else:
+        print(formatted_line)
+
+format_smart_line()
+"
+}
+
+# SMART header output function
+print_smart_header() {
+    printf "%-4s %-32s %-8s %6s %6s %7s %6s %s\n" \
+        "ID#" "ATTRIBUTE_NAME" "FLAGS" "VALUE" "WORST" "THRESH" "FAIL" "RAW_VALUE"
+}
+
 smart_all(){ 
     # Show all SMART attributes
     # $drive is sata1 or sda or usb1 etc
     echo ""
+    
+    # Output aligned header
+    print_smart_header
+    
     if [[ $seagate == "yes" ]] && [[ $smartversion == 7 ]]; then
-        readarray -t att_array < <("$smartctl" -A -f brief -d sat -T permissive -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 "/dev/$drive" | tail -n +7)
+        # Get all attributes, skip built-in header (first 6 lines), then drop “ID#” header
+        readarray -t att_array < <(
+            "$smartctl" -A -f brief -d sat -T permissive \
+                -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 "/dev/$drive" \
+            | tail -n +7 \
+            | grep -v '^ID#'
+        )
     else
-        readarray -t att_array < <("$smartctl" -A -f brief -d sat -T permissive "/dev/$drive" | tail -n +7)
+        # Same for non-Seagate drives
+        readarray -t att_array < <(
+            "$smartctl" -A -f brief -d sat -T permissive "/dev/$drive" \
+            | tail -n +7 \
+            | grep -v '^ID#'
+        )
     fi
+    
     for strIn in "${att_array[@]}"; do
         # Remove lines containing ||||||_ to |______
         if ! echo "$strIn" | grep '|_' >/dev/null ; then
-            # Remove columns 36 to 78
-            strOut="${strIn:0:36}${strIn:78}"
-            check="$(echo "$strOut" | xargs | awk '{print $1}')"
-            if [[ $check == 5 ]] || [[ $check == 10 ]] || [[ $check == 187 ]] || [[ $check == 188 ]] ||\
-                [[ $check == 196 ]] || [[ $check == 197 ]] || [[ $check == 198 ]];
-            then
-                # Highlight indicators of drive failure in yellow
-                echo -e "${Yellow}${strOut}${Off}"
-            #if [[ $check == 1 ]] || [[ $check == 5 ]] || [[ $check == 7 ]]\
-            #    || [[ $check == 10 ]] || [[ $check == 187 ]] || [[ $check == 188 ]] ||\
-            #    [[ $check == 196 ]] || [[ $check == 197 ]] || [[ $check == 198 ]];
-            else
-                echo "$strIn"
-            fi
+            # Use Python-based formatting instead of original string cutting
+            print_colored_smart_attribute "$strIn"
         fi
     done
 }
@@ -651,4 +731,3 @@ if [[ $warn -gt "0" ]]; then
 fi
 
 exit "$errtotal"
-
