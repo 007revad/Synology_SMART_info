@@ -22,7 +22,7 @@
 # https://www.disktuna.com/seagate-raw-smart-attributes-to-error-convertertest/#102465319
 #------------------------------------------------------------------------------
 
-scriptver="v1.3.14"
+scriptver="v1.3.15"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -52,6 +52,10 @@ fi
 
 ding(){ 
     printf \\a
+}
+
+debug() {
+    [[ $debug == "yes" ]] && echo "DEBUG: $*"
 }
 
 usage(){ 
@@ -184,6 +188,20 @@ if ! printf "%s\n%s\n" "$tag" "$scriptver" |
 fi
 
 #------------------------------------------------------------------------------
+detect_dtype() {
+    # Default to SAT
+    local dtype="sat"
+
+    # If SAS appears at least once, treat as SCSI
+    if [ "$("$smartctl" -i /dev/"$drive" 2>/dev/null | grep -c SAS)" -gt 0 ]; then
+        dtype="scsi"
+    # Else if SATA appears at least once, treat as SAT
+    elif [ "$("$smartctl" -i /dev/"$drive" 2>/dev/null | grep -c SATA)" -gt 0 ]; then
+        dtype="sat"
+    fi
+
+    echo "$dtype"
+}
 
 get_drive_num(){ 
     drive_num=""
@@ -336,12 +354,110 @@ print_smart_header() {
         "ID#" "ATTRIBUTE_NAME" "FLAGS" "VALUE" "WORST" "THRESH" "FAIL" "RAW_VALUE"
 }
 
-smart_all(){ 
-    # Show all SMART attributes
-    # $drive is sata1 or sda or usb1 etc
+# SCSI SMART attribute formatting function (uses SCSI-only parsing)
+format_scsi_smart() {
+    local drive="$1"
+    local output
+
+    debug "format_scsi_smart called for drive: $drive"
+
+    # Retrieve SCSI SMART output via wrapper; strip the leading header block
+    output=$("$smartctl" -a "/dev/$drive" | tail -n +19)
+
+    debug "SCSI output (first 20 lines):"
+    debug "$(echo "$output" | head -20)"
+
+    # Arrays to hold parsed items
+    declare -a scsi_ids=()
+    declare -a scsi_names=()
+    declare -a scsi_values=()
+
+    # Parse 5 patterns and map to standard IDs
+    while IFS= read -r line; do
+        debug "Processing line: '$line'"
+
+        if [[ "$line" == *"Current Drive Temperature:"* ]]; then
+            # Extract temperature number only
+            temp_value=$(echo "$line" | grep -o '[0-9]\+' | head -1)
+            debug "Found temperature: $temp_value"
+            scsi_ids+=(194); scsi_names+=("Current Drive Temperature"); scsi_values+=("$temp_value")
+
+        elif [[ "$line" == *"Accumulated power on time, hours:minutes"* ]]; then
+            time_value=$(echo "$line" | awk -F'Accumulated power on time, hours:minutes ' '{print $2}' | xargs)
+            debug "Found power on time: '$time_value'"
+            scsi_ids+=(9); scsi_names+=("Accumulated power on time"); scsi_values+=("$time_value")
+
+        elif [[ "$line" == *"Accumulated start-stop cycles:"* ]]; then
+            cycle_value=$(echo "$line" | awk '{print $NF}')
+            debug "Found start-stop cycles: $cycle_value"
+            scsi_ids+=(4); scsi_names+=("Accumulated start-stop cycles"); scsi_values+=("$cycle_value")
+
+        elif [[ "$line" == *"Accumulated load-unload cycles:"* ]]; then
+            load_value=$(echo "$line" | awk '{print $NF}')
+            debug "Found load-unload cycles: $load_value"
+            scsi_ids+=(193); scsi_names+=("Accumulated load-unload cycles"); scsi_values+=("$load_value")
+
+        elif [[ "$line" == *"Elements in grown defect list:"* ]]; then
+            defect_value=$(echo "$line" | awk '{print $NF}')
+            debug "Found defect list elements: $defect_value"
+            scsi_ids+=(5); scsi_names+=("Elements in grown defect list"); scsi_values+=("$defect_value")
+        fi
+    done <<< "$output"
+
+    debug "Found ${#scsi_ids[@]} attributes"
+    for ((i=0; i<${#scsi_ids[@]}; i++)); do
+        debug "ID=${scsi_ids[i]}, Name='${scsi_names[i]}', Value='${scsi_values[i]}'"
+    done
+
+    if [[ ${#scsi_ids[@]} -eq 0 ]]; then
+        debug "No SCSI attributes found, showing raw output"
+        echo "No SCSI attributes found in expected format"
+        echo "$output"
+        return
+    fi
+
+    # Sort by ID (bubble sort for simplicity)
+    local n=${#scsi_ids[@]}
+    for ((i=0; i<n-1; i++)); do
+        for ((j=0; j<n-i-1; j++)); do
+            if [[ ${scsi_ids[j]} -gt ${scsi_ids[j+1]} ]]; then
+                # swap id
+                tmp=${scsi_ids[j]}; scsi_ids[j]=${scsi_ids[j+1]}; scsi_ids[j+1]=$tmp
+                # swap name
+                tmp=${scsi_names[j]}; scsi_names[j]=${scsi_names[j+1]}; scsi_names[j+1]=$tmp
+                # swap value
+                tmp=${scsi_values[j]}; scsi_values[j]=${scsi_values[j+1]}; scsi_values[j+1]=$tmp
+            fi
+        done
+    done
+
+    # Output (SCSI-only summary header and rows)
+    printf "%-4s %-40s %s\n" "ID#" "ATTRIBUTE_NAME" "RAW_VALUE"
+    for ((i=0; i<${#scsi_ids[@]}; i++)); do
+        local id=${scsi_ids[i]} name=${scsi_names[i]} val=${scsi_values[i]}
+        if [[ $color != "no" && ( $id -eq 5 ) ]]; then
+            printf "${Yellow}%-4s %-40s %s${Off}\n" "$id" "$name" "$val"
+        else
+            printf "%-4s %-40s %s\n" "$id" "$name" "$val"
+        fi
+    done
+}
+
+smart_all(){
     echo ""
-    
-    # Output aligned header
+
+    # Decide device type (sat/scsi) via detect_dtype()
+    local drive_type
+    drive_type=$(detect_dtype)
+
+    if [[ "$drive_type" == "scsi" ]]; then
+        # SCSI path: do not print SAT header or use SAT python formatter.
+        # Let the dedicated SCSI formatter read and parse directly.
+        format_scsi_smart "$drive"
+        return
+    fi
+
+    # SAT / non-SCSI path
     print_smart_header
     
     if [[ $seagate == "yes" ]] && [[ $smartversion == 7 ]]; then
@@ -391,8 +507,12 @@ show_health(){
     # $drive is sata1 or sda or usb1 etc
     local att194
 
+    # Decide device type (sat/scsi) via detect_dtype()
+    local drive_type
+    drive_type=$(detect_dtype)
+
     # Show drive overall health
-    readarray -t health_array < <("$smartctl" -H -d sat -T permissive /dev/"$drive" | tail -n +5)
+    readarray -t health_array < <("$smartctl" -H -d $drive_type -T permissive /dev/"$drive" | tail -n +5)
     for strIn in "${health_array[@]}"; do
         if echo "$strIn" | awk '{print $1}' | grep -E '[0-9]' >/dev/null ||\
            echo "$strIn" | awk '{print $1}' | grep 'ID#' >/dev/null ; then
@@ -411,6 +531,8 @@ show_health(){
             if [[ -n "$strIn" ]]; then  # Don't echo blank line
                 if $(echo "$strIn" | grep -qi PASSED); then
                     echo -e "SMART overall-health self-assessment test result: ${LiteGreen}PASSED${Off}"
+                elif $(echo "$strIn" | grep -qi 'Health Status: OK'); then
+                    echo -e "SMART Health Status: ${LiteGreen}OK${Off}"
                 else
                     echo "$strIn"
                 fi
