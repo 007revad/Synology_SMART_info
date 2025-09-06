@@ -22,7 +22,7 @@
 # https://www.disktuna.com/seagate-raw-smart-attributes-to-error-convertertest/#102465319
 #------------------------------------------------------------------------------
 
-scriptver="v1.3.15"
+scriptver="v1.3.16"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -660,7 +660,20 @@ smart_nvme(){
     elif [[ $1 == "smart-log" ]]; then
         # Retrieve SMART Log
         echo ""
-        nvme smart-log "/dev/$drive"
+        #nvme smart-log "/dev/$drive"
+        readarray -t nvme_health_array < <(nvme smart-log "/dev/$drive")
+        for strIn in "${nvme_health_array[@]}"; do
+            if echo "$strIn" | grep 'data_units_' >/dev/null; then
+                # Get data_units read or written
+                units="$(echo "$strIn" | awk '{print $3}')"
+                # Remove commas and convert to TB/GB/MB
+                units_show="$(echo "${units//,}" | numfmt --to=si --suffix=B)"
+                # Show data_units read or written
+                echo "$strIn  ($units_show)"
+            else
+                echo "$strIn"
+            fi
+        done
         echo ""
     elif [[ $1 == "smart-log-add" ]]; then
         # Retrieve additional SMART Log
