@@ -1,3 +1,9 @@
+v1.3.15
+- Fix for SAS drives. Thanks @PeterSuh-Q3. Discussion #24
+
+v1.3.14
+- Modified smart_all() function [Adjust output indentation using Python script]. Thanks @PeterSuh-Q3
+
 v1.3.13
 - Bug fix for "195 Hardware_ECC_Recovered" incorrectly being padded with 2 leading spaces as "  195 Hardware_ECC_Recovered".
 
