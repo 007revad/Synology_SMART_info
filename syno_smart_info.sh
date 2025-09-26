@@ -22,7 +22,7 @@
 # https://www.disktuna.com/seagate-raw-smart-attributes-to-error-convertertest/#102465319
 #------------------------------------------------------------------------------
 
-scriptver="v1.3.16"
+scriptver="v1.3.17"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -544,7 +544,7 @@ show_health(){
     #"$smartctl" -l error /dev/"$drive" | grep -iE 'error.*logg'
 
     # Retrieve Error Log and show error count
-    errlog="$("$smartctl" -l error /dev/"$drive" | grep -iE 'error.*logg')"
+    errlog="$("$smartctl" -l error -d $drive_type /dev/"$drive" | grep -iE 'error.*logg')"
     errcount="$(echo "$errlog" | awk '{print $3}')"
     #echo "$errlog"
     if [[ $errcount -gt "0" ]]; then
