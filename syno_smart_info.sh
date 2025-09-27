@@ -22,7 +22,7 @@
 # https://www.disktuna.com/seagate-raw-smart-attributes-to-error-convertertest/#102465319
 #------------------------------------------------------------------------------
 
-scriptver="v1.3.17"
+scriptver="v1.3.18"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -512,7 +512,7 @@ show_health(){
     drive_type=$(detect_dtype)
 
     # Show drive overall health
-    readarray -t health_array < <("$smartctl" -H -d $drive_type -T permissive /dev/"$drive" | tail -n +5)
+    readarray -t health_array < <("$smartctl" -H -d "$drive_type" -T permissive /dev/"$drive" | tail -n +5)
     for strIn in "${health_array[@]}"; do
         if echo "$strIn" | awk '{print $1}' | grep -E '[0-9]' >/dev/null ||\
            echo "$strIn" | awk '{print $1}' | grep 'ID#' >/dev/null ; then
@@ -544,11 +544,17 @@ show_health(){
     #"$smartctl" -l error /dev/"$drive" | grep -iE 'error.*logg'
 
     # Retrieve Error Log and show error count
-    errlog="$("$smartctl" -l error -d $drive_type /dev/"$drive" | grep -iE 'error.*logg')"
+    errlog="$("$smartctl" -l error -d "$drive_type" /dev/"$drive" | grep -iE 'error.*logg')"
     errcount="$(echo "$errlog" | awk '{print $3}')"
+    if [[ -z $errlog ]]; then
+        errlog="$("$smartctl" -l error -d "$drive_type" /dev/"$drive" | grep -iE 'error count')"
+        errcount="$(echo "$errlog" | awk '{print $4}')"
+    fi
     #echo "$errlog"
-    if [[ $errcount -gt "0" ]]; then
-    #if [[ $errcount -eq "0" ]]; then  # debug
+    if [[ -z $errcount ]]; then
+        "$smartctl" -l error -d "$drive_type" /dev/"$drive" | grep -iE 'not supported'
+    elif [[ $errcount -gt "0" ]]; then
+    #elif [[ $errcount -eq "0" ]]; then  # debug
         errtotal=$((errtotal +errcount))
         echo -e "SMART Error Counter Log:         ${LiteRed}$errcount${Off}"
     else
@@ -748,8 +754,13 @@ is_usb(){
 }
 
 is_seagate(){
+    # Check if drive is Seagate
     DEVICE=$("$smartctl" -A -i /dev/"$drive" | awk -F ' ' '/Device Model/{print $3}')
-    if [[ "${DEVICE:0:2}" == "ST" ]]; then
+    # Check if drive is Seagate based Synology HAT3300
+    if [[ -z $DEVICE ]]; then
+        DEVICE=$("$smartctl" -A -i /dev/"$drive" | awk -F ' ' '/Product/{print $2}')
+    fi
+    if [[ "${DEVICE:0:2}" == "ST" ]] || [[ "${DEVICE:0:7}" == "HAT3300" ]]; then
         return 0
     else
         return 1
