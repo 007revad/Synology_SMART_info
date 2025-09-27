@@ -1,3 +1,9 @@
+v1.3.18
+- Added support for decoding Synology HAT3300 (Seagate) SMART attributes 1, 7 and 195 if smartctl is v7 is installed.
+  - Installing the Syno Community's "SynoCli Disk Tools v4.0-13" or later package to install smartctl v7.4
+  - Download the latest SynoCli Disk Tools package from https://synocommunity.com/package/synocli-disk
+- Bug fixes for SMART Error Counter Log.
+
 v1.3.17
 - Bug fix for showing "No errors logged" when smartctl returned "Error Counter logging not supported" due to missing `-d sat` or `-d sas`. Issue #30
 
