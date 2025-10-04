@@ -2,6 +2,7 @@ v1.3.19
 - Improved display of all attributes for NVMe drives.
 - Important attributes now shown in yellow for NVMe drives the same as for HDDs.
 - Nicer display of all attributes for NVMe drives when smartctl 7 is installed.
+- Added SMART overall health status for NVMe drives when smartctl7 is installed.
 
 v1.3.18
 - Added support for decoding Synology HAT3300 (Seagate) SMART attributes 1, 7 and 195 if smartctl v7 is installed.
