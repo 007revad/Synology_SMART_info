@@ -731,7 +731,7 @@ smart_nvme(){
         nvme smart-log-add "/dev/$drive"    # Does not work
     elif [[ $1 == "self-test-log" ]]; then
         # Retrieve the SELF-TEST Log
-        nvme self-test-log "/dev/$drive"    # Does not work
+        nvme self-test-log "/dev/$drive"    # Not used
     fi
 }
 
@@ -899,6 +899,18 @@ for drive in "${nvmes[@]}"; do
     # Show drive model and serial
     get_nvme_num
     show_drive_model
+
+    # Show SMART overall health if smartctl7 is installed
+    if [[ $smartversion -gt "6" ]]; then
+        strIn=$("$smartctl" -H /dev/"$drive" | grep 'health')
+        if $(echo "$strIn" | grep -qi PASSED); then
+            echo -e "SMART overall-health self-assessment test result: ${LiteGreen}PASSED${Off}"
+        elif $(echo "$strIn" | grep -qi 'Health Status: OK'); then
+            echo -e "SMART Health Status: ${LiteGreen}OK${Off}"
+        else
+            echo "$strIn"
+        fi
+    fi
 
     smart_nvme error-log
     if [[ $errcount -gt "0" ]]; then
