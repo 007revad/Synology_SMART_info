@@ -20,9 +20,11 @@
 #
 # online Seagate SMART value convertor
 # https://www.disktuna.com/seagate-raw-smart-attributes-to-error-convertertest/#102465319
+#
+# https://github.com/Seagate/openSeaChest/wiki/Drive-Health-and-SMART
 #------------------------------------------------------------------------------
 
-scriptver="v1.3.18"
+scriptver="v1.3.19"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -188,7 +190,8 @@ if ! printf "%s\n%s\n" "$tag" "$scriptver" |
 fi
 
 #------------------------------------------------------------------------------
-detect_dtype() {
+
+detect_dtype(){ 
     # Default to SAT
     local dtype="sat"
 
@@ -279,7 +282,7 @@ show_drive_model(){
 }
 
 # Python-based SMART attribute formatting function using EOF method
-print_colored_smart_attribute() {
+print_colored_smart_attribute(){ 
     local line="$1"
     [[ -z "$line" ]] && return
     
@@ -349,13 +352,13 @@ format_smart_line()
 }
 
 # SMART header output function
-print_smart_header() {
+print_smart_header(){ 
     printf "%-4s %-32s %-8s %6s %6s %7s %6s %s\n" \
         "ID#" "ATTRIBUTE_NAME" "FLAGS" "VALUE" "WORST" "THRESH" "FAIL" "RAW_VALUE"
 }
 
 # SCSI SMART attribute formatting function (uses SCSI-only parsing)
-format_scsi_smart() {
+format_scsi_smart(){ 
     local drive="$1"
     local output
 
@@ -459,7 +462,7 @@ smart_all(){
 
     # SAT / non-SCSI path
     print_smart_header
-    
+
     if [[ $seagate == "yes" ]] && [[ $smartversion == 7 ]]; then
         # Get all attributes, skip built-in header (first 6 lines), then drop “ID#” header
         readarray -t att_array < <(
@@ -476,7 +479,7 @@ smart_all(){
             | grep -v '^ID#'
         )
     fi
-    
+
     for strIn in "${att_array[@]}"; do
         # Remove lines containing ||||||_ to |______
         if ! echo "$strIn" | grep '|_' >/dev/null ; then
@@ -503,7 +506,7 @@ short_attibutes(){
     fi
 }
 
-show_health(){
+show_health(){ 
     # $drive is sata1 or sda or usb1 etc
     local att194
 
@@ -564,7 +567,7 @@ show_health(){
     # Show SMART attributes
     health=$("$smartctl" -H -d sat -T permissive /dev/"$drive" | tail -n +5)
     if ! echo "$health" | grep PASSED >/dev/null || [[ $all == "yes" ]]; then
-        # Show all SMART attributes if health != passed
+        # Show all SMART attributes if health != passed, or -a/--all option used
         smart_all
     else
         # Show only important SMART attributes
@@ -650,7 +653,9 @@ show_health(){
 }
 
 smart_nvme(){ 
-    # $1 is log type
+    # $1 is log type: error-log, smart-log, smart-log-add or self-test-log
+    # $drive is nvme0 etc
+
     if [[ $1 == "error-log" ]]; then
         # Retrieve Error Log and show error count
         errlog="$(nvme error-log "/dev/$drive" | grep error_count | uniq)"
@@ -666,21 +671,61 @@ smart_nvme(){
     elif [[ $1 == "smart-log" ]]; then
         # Retrieve SMART Log
         echo ""
-        #nvme smart-log "/dev/$drive"
-        readarray -t nvme_health_array < <(nvme smart-log "/dev/$drive")
+        if [[ $smartversion -gt "6" ]]; then
+            # smartctl7 is installed
+            #readarray -t nvme_health_array < <(smartctl7 -A /dev/"$drive" | awk '/=== START OF SMART DATA SECTION ===/{flag=1;next}flag')
+            readarray -t nvme_health_array < <(smartctl7 -A /dev/"$drive" | awk '/Health Information/{flag=1;next}flag')
+        else
+            # smartctl is not v7 so we need to use nvme command
+            readarray -t nvme_health_array < <(nvme smart-log "/dev/$drive" | awk '/Smart Log for NVME/{flag=1;next}flag')
+        fi
         for strIn in "${nvme_health_array[@]}"; do
-            if echo "$strIn" | grep 'data_units_' >/dev/null; then
-                # Get data_units read or written
-                units="$(echo "$strIn" | awk '{print $3}')"
-                # Remove commas and convert to TB/GB/MB
-                units_show="$(echo "${units//,}" | numfmt --to=si --suffix=B)"
-                # Show data_units read or written
-                echo "$strIn  ($units_show)"
+            if [[ $smartversion -gt "6" ]]; then
+                # smartctl7 is installed
+                if echo "$strIn" | grep 'Critical Warning:' >/dev/null; then
+                    echo -e "${Yellow}$strIn${Off}"
+                elif echo "$strIn" | grep 'Temperature:' >/dev/null; then
+                    echo -e "${Yellow}$strIn${Off}"
+                elif echo "$strIn" | grep 'Percentage Used:' >/dev/null; then
+                    echo -e "${Yellow}$strIn${Off}"
+                elif echo "$strIn" | grep 'Power On Hours:' >/dev/null; then
+                    echo -e "${Yellow}$strIn${Off}"
+                elif echo "$strIn" | grep 'Unsafe Shutdowns:' >/dev/null; then
+                    echo -e "${Yellow}$strIn${Off}"
+                elif echo "$strIn" | grep 'Media and Data Integrity Errors:' >/dev/null; then
+                    echo -e "${Yellow}$strIn${Off}"
+                else
+                    echo "$strIn"
+                fi
             else
-                echo "$strIn"
+                # smartctl7 not installed
+                if echo "$strIn" | grep 'data_units_' >/dev/null; then
+                    # Get data_units read or written
+                    units="$(echo "$strIn" | awk '{print $3}')"
+                    # Remove commas and convert to TB/GB/MB
+                    units_show="$(echo "${units//,}" | numfmt --to=si --suffix=B)"
+                    # Show data_units read or written
+                    echo "$strIn  ($units_show)"
+                elif echo "$strIn" | grep 'critical_warning' >/dev/null; then
+                    echo -e "${Yellow}$strIn${Off}"
+                elif echo "$strIn" | grep 'temperature' >/dev/null; then
+                    echo -e "${Yellow}$strIn${Off}"
+                elif echo "$strIn" | grep 'percentage_used' >/dev/null; then
+                    echo -e "${Yellow}$strIn${Off}"
+                elif echo "$strIn" | grep 'power_on_hours' >/dev/null; then
+                    echo -e "${Yellow}$strIn${Off}"
+                elif echo "$strIn" | grep 'unsafe_shutdowns' >/dev/null; then
+                    echo -e "${Yellow}$strIn${Off}"
+                elif echo "$strIn" | grep 'media_errors' >/dev/null; then
+                    echo -e "${Yellow}$strIn${Off}"
+                else
+                    echo "$strIn"
+                fi
             fi
         done
-        echo ""
+        if [[ $smartversion -lt "7" ]]; then
+            echo ""
+        fi
     elif [[ $1 == "smart-log-add" ]]; then
         # Retrieve additional SMART Log
         nvme smart-log-add "/dev/$drive"    # Does not work
@@ -753,10 +798,9 @@ is_usb(){
     fi
 }
 
-is_seagate(){
-    # Check if drive is Seagate
+is_seagate(){ 
+    # Check if drive is Seagate or Seagate based Synology HAT3300
     DEVICE=$("$smartctl" -A -i /dev/"$drive" | awk -F ' ' '/Device Model/{print $3}')
-    # Check if drive is Seagate based Synology HAT3300
     if [[ -z $DEVICE ]]; then
         DEVICE=$("$smartctl" -A -i /dev/"$drive" | awk -F ' ' '/Product/{print $2}')
     fi
@@ -861,12 +905,13 @@ for drive in "${nvmes[@]}"; do
         errtotal=$((errtotal +errcount))
     fi
 
-    # Show important smart values
-    show_health_nvme
-
-    # Show important smart values
+    # Show SMART attributes
     if [[ $errcount -gt "0" ]] || [[ $all == "yes" ]]; then
+        # Show all SMART attributes if health != passed, or -a/--all option used
         smart_nvme smart-log        
+    else
+        # Show only important SMART attributes
+        show_health_nvme
     fi
 done
 
