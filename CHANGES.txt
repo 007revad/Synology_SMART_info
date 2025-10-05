@@ -1,3 +1,7 @@
+v1.4.20
+- Added -i, --increased option to only show drives with important attributes that have increased.
+  - Useful for when the script is scheduled so you only get sent an email when important attributes that have increased.
+
 v1.3.19
 - Improved display of all attributes for NVMe drives.
 - Important attributes now shown in yellow for NVMe drives the same as for HDDs.
