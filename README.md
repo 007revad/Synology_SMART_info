@@ -55,6 +55,7 @@ There are optional flags you can use when running the script:
 ```YAML
   -a, --all             Show all SMART attributes
   -e, --email           Disable colored text in output scheduler emails
+  -i, --increased       Only show important attributes that have increased
   -h, --help            Show this help message
   -v, --version         Show the script version
 ```
@@ -85,6 +86,9 @@ If you have Seagate drives you should install SynoCommunity's [SynoCli Disk Tool
 
 <p align="center">SSD with reallocated sectors</p>
 <p align="center"><img src="/images/senna.png"></p>
+
+<p align="center">Run with --increased option</p>
+<p align="center"><img src="/images/increased.png"></p>
 
 <p align="center">HDD and SSD when run with --all option</p>
 <p align="center"><img src="/images/hdd_ssd_all.png"></p>
