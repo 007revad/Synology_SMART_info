@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2317
+# shellcheck disable=SC2317,SC2091
 #------------------------------------------------------------------------------
 # Show Synology smart test progress or smart health and attributes
 #
@@ -24,12 +24,12 @@
 # https://github.com/Seagate/openSeaChest/wiki/Drive-Health-and-SMART
 #------------------------------------------------------------------------------
 
-scriptver="v1.3.19"
+scriptver="v1.4.20"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
 # Get NAS model
-model=$(cat /proc/sys/kernel/syno_hw_version)
+nas_model=$(cat /proc/sys/kernel/syno_hw_version)
 
 # Get NAS hostname
 host_name=$(hostname)
@@ -42,6 +42,10 @@ smallfixnumber=$(/usr/syno/bin/synogetkeyvalue /etc.defaults/VERSION smallfixnum
 
 # Get DSM major version
 dsm=$(get_key_value /etc.defaults/VERSION majorversion)
+
+# Get location of script
+scriptpath="$(realpath "$0")"
+logpath="${scriptpath%/*}"
 
 # Get smartctl location and check if version 7
 if which smartctl7 >/dev/null; then
@@ -69,6 +73,7 @@ Usage: $(basename "$0") [options]
 Options:
   -a, --all             Show all SMART attributes
   -e, --email           Disable colored text in output scheduler emails
+  -i, --increased       Only show important attributes that have increased
   -h, --help            Show this help message
   -v, --version         Show the script version
 
@@ -90,7 +95,7 @@ args=("$@")
 
 # Check for flags with getopt
 if options="$(getopt -o abcdefghijklmnopqrstuvwxyz0123456789 -l \
-    all,email,help,version,debug \
+    all,email,increased,help,version,debug \
     -- "$@")"; then
     eval set -- "$options"
     while true; do
@@ -100,6 +105,9 @@ if options="$(getopt -o abcdefghijklmnopqrstuvwxyz0123456789 -l \
                 ;;
             -e|--email)         # Disable colour text in task scheduler emails
                 color=no
+                ;;
+            -i|--increased)     # Only display increased attributes
+                increased=yes
                 ;;
             -h|--help)          # Show usage options
                 usage
@@ -158,7 +166,7 @@ echo "$script $scriptver - by 007revad"
 # Show hostname, model and DSM full version
 if [[ $buildphase == GM ]]; then buildphase=""; fi
 if [[ $smallfixnumber -gt "0" ]]; then smallfix="-$smallfixnumber"; fi
-echo -e "$host_name $model DSM $productversion-$buildnumber$smallfix $buildphase"
+echo -e "$host_name $nas_model DSM $productversion-$buildnumber$smallfix $buildphase"
 echo "Using smartctl $("$smartctl" --version | head -1 | awk '{print $2}')"
 
 # Show options used
@@ -252,6 +260,24 @@ get_nvme_num(){
     drive_num="M.2 Drive $pcislot$cardslot  "
 }
 
+log_drive(){
+    # $1 is "$serial"
+    # $2 is "$drive_num"
+    # $3 is "$model"
+    # $4 is "/dev/$drive"    
+
+    # set_section_key_value bugs
+    # It cannot create a new section
+    # It cannot write keys if no key/value pair exist below section
+    # So we echo the section with a dummy key/value pair
+    if ! grep '\['"$1"'\]' "$smart_log" >/dev/null; then
+        echo -e "[${serial}]\ndrive_num=" >> "$smart_log"
+    fi
+    set_section_key_value "$smart_log" "$1" drive_num "$2"
+    set_section_key_value "$smart_log" "$1" model "$3"
+    set_section_key_value "$smart_log" "$1" device "$4"
+}
+
 show_drive_model(){ 
     # Get drive model
     # $drive is sata1 or sda or usb1 etc
@@ -276,9 +302,16 @@ show_drive_model(){
     fi
 
     # Show drive model and serial
-    #echo -e "\n${Cyan}${drive_num}${Off}$model  ${Yellow}$serial${Off}"
-    echo -e "\n${Cyan}${drive_num}${Off}$model  $serial  /dev/$drive"
-    #echo -e "\n${Cyan}${drive_num}${Off}$vendor $model  $serial"
+    if [[ $increased != "yes" ]]; then
+        #echo -e "\n${Cyan}${drive_num}${Off}$model  ${Yellow}$serial${Off}"
+        echo -e "\n${Cyan}${drive_num}${Off}$model  $serial  /dev/$drive"
+        #echo -e "\n${Cyan}${drive_num}${Off}$vendor $model  $serial"
+    else
+        show_drive_info="\n${Cyan}${drive_num}${Off}$model  $serial  /dev/$drive"
+    fi
+
+    # Log drive num, vendor and model to smart.log
+    log_drive "$serial" "$drive_num" "$model" "/dev/$drive"
 }
 
 # Python-based SMART attribute formatting function using EOF method
@@ -489,19 +522,71 @@ smart_all(){
     done
 }
 
+log_bad(){ 
+    # $1 is "197 Current_Pending_Sector  0x0032   200   200   000    Old_age   Always       -       52"
+    local var1
+    local var2
+    var1=$(echo "$1" | awk '{printf "%-28s", $2}')
+    var2=$(echo "$1" | awk '{printf $10}' | awk -F"+" '{print $1}' | cut -d"h" -f1)
+
+    var1_trimmed="$(echo "$var1" | xargs)"
+    show_increased=""
+    previous_att="$(get_section_key_value "$smart_log" "$serial" "$var1_trimmed")"
+    if [[ -z $previous_att ]]; then
+        # Create ini section if missing
+        if ! grep "$serial" "$smart_log" > /dev/null; then
+            echo -e "[${serial}]\ndrive_num=" >> "$smart_log"
+        fi
+        set_section_key_value "$smart_log" "$serial" "$var1_trimmed" "$var2"
+        show_increased="    Increased by $var2"
+    elif [[ $var2 -gt "$previous_att" ]]; then
+        set_section_key_value "$smart_log" "$serial" "$var1_trimmed" "$var2"
+        show_increased="    Increased by $((var2 - previous_att))"
+    fi
+}
+
+log_bad_nvme(){ 
+    # $var2 is smart attribute value
+    # $var3 is smart attribute name
+
+    var3_trimmed="$(echo "$var3" | xargs)"
+    show_increased=""
+    previous_att="$(get_section_key_value "$smart_log" "$serial" "$var3_trimmed")"
+    if [[ -z $previous_att ]]; then
+        # Create ini section if missing
+        if ! grep "$serial" "$smart_log" > /dev/null; then
+            echo -e "[${serial}]\ndrive_num=" >> "$smart_log"
+        fi
+        set_section_key_value "$smart_log" "$serial" "$var3_trimmed" "$var2"
+        show_increased="    Increased by $var2"
+    elif [[ $var2 -gt "$previous_att" ]]; then
+        set_section_key_value "$smart_log" "$serial" "$var3_trimmed" "$var2"
+        show_increased="    Increased by $((var2 - previous_att))"
+    fi
+}
+
 short_attibutes(){ 
     if [[ "$strIn" ]]; then
         var1=$(echo "$strIn" | awk '{printf "%-28s", $2}')
         var2=$(echo "$strIn" | awk '{printf $10}' | awk -F"+" '{print $1}' | cut -d"h" -f1)
         if [[ ${var2:0:1} -gt "0" && $2 == "zero" ]]; then
-            echo -e "$1 ${Yellow}$var1${Off} ${LiteRed}$var2${Off}"
             if [[ $var2 -gt "0" ]]; then
                 warn=$((warn +1))
+                log_bad "$strIn"
+            fi
+            if [[ $increased != "yes" ]]; then
+                echo -e "$1 ${Yellow}$var1${Off} ${LiteRed}$var2${Off}$show_increased"
+            else
+                changed_atts+=("$1 ${Yellow}$var1${Off} ${LiteRed}$var2${Off}$show_increased")
             fi
         elif [[ ${var2:0:1} -gt "0" && $2 == "none" ]]; then
-            echo -e "$1 $var1 $var2"
+            if [[ $increased != "yes" ]]; then
+                echo -e "$1 $var1 $var2"
+            fi
         else
-            echo -e "$1 ${Yellow}$var1${Off} $var2"
+            if [[ $increased != "yes" ]]; then
+                echo -e "$1 ${Yellow}$var1${Off} $var2"
+            fi
         fi
     fi
 }
@@ -529,15 +614,23 @@ show_health(){
             # Remove columns after 77
             strOut="${strOut:0:77}"
 
-            echo "$strOut"
+            if [[ $increased != "yes" ]]; then
+                echo "$strOut"
+            fi
         else
             if [[ -n "$strIn" ]]; then  # Don't echo blank line
                 if $(echo "$strIn" | grep -qi PASSED); then
-                    echo -e "SMART overall-health self-assessment test result: ${LiteGreen}PASSED${Off}"
+                    if [[ $increased != "yes" ]]; then
+                        echo -e "SMART overall-health self-assessment test result: ${LiteGreen}PASSED${Off}"
+                    fi
                 elif $(echo "$strIn" | grep -qi 'Health Status: OK'); then
-                    echo -e "SMART Health Status: ${LiteGreen}OK${Off}"
+                    if [[ $increased != "yes" ]]; then
+                        echo -e "SMART Health Status: ${LiteGreen}OK${Off}"
+                    fi
                 else
-                    echo "$strIn"
+                    if [[ $increased != "yes" ]]; then
+                        echo "$strIn"
+                    fi
                 fi
             fi
         fi
@@ -553,15 +646,20 @@ show_health(){
         errlog="$("$smartctl" -l error -d "$drive_type" /dev/"$drive" | grep -iE 'error count')"
         errcount="$(echo "$errlog" | awk '{print $4}')"
     fi
-    #echo "$errlog"
     if [[ -z $errcount ]]; then
-        "$smartctl" -l error -d "$drive_type" /dev/"$drive" | grep -iE 'not supported'
+        if [[ $increased != "yes" ]]; then
+            "$smartctl" -l error -d "$drive_type" /dev/"$drive" | grep -iE 'not supported'
+        fi
     elif [[ $errcount -gt "0" ]]; then
     #elif [[ $errcount -eq "0" ]]; then  # debug
         errtotal=$((errtotal +errcount))
-        echo -e "SMART Error Counter Log:         ${LiteRed}$errcount${Off}"
+        if [[ $increased != "yes" ]]; then
+            echo -e "SMART Error Counter Log:         ${LiteRed}$errcount${Off}"
+        fi
     else
-        echo -e "SMART Error Counter Log:         ${LiteGreen}No Errors Logged${Off}"
+        if [[ $increased != "yes" ]]; then
+            echo -e "SMART Error Counter Log:         ${LiteGreen}No Errors Logged${Off}"
+        fi
     fi
 
     # Show SMART attributes
@@ -660,13 +758,16 @@ smart_nvme(){
         # Retrieve Error Log and show error count
         errlog="$(nvme error-log "/dev/$drive" | grep error_count | uniq)"
         errcount="$(echo "$errlog" | awk '{print $3}')"
-        #echo "$errlog"
         if [[ $errcount -gt "0" ]]; then
         #if [[ $errcount -eq "0" ]]; then  # debug
             errtotal=$((errtotal +errcount))
-            echo -e "SMART Error Counter Log:         ${LiteRed}$errcount${Off}"
+            if [[ $increased != "yes" ]]; then
+                echo -e "SMART Error Counter Log:         ${LiteRed}$errcount${Off}"
+            fi
         else
-            echo -e "SMART Error Counter Log:         ${LiteGreen}No Errors Logged${Off}"
+            if [[ $increased != "yes" ]]; then
+                echo -e "SMART Error Counter Log:         ${LiteGreen}No Errors Logged${Off}"
+            fi
         fi
     elif [[ $1 == "smart-log" ]]; then
         # Retrieve SMART Log
@@ -683,19 +784,33 @@ smart_nvme(){
             if [[ $smartversion -gt "6" ]]; then
                 # smartctl7 is installed
                 if echo "$strIn" | grep 'Critical Warning:' >/dev/null; then
-                    echo -e "${Yellow}$strIn${Off}"
+                    if [[ $increased != "yes" ]]; then
+                        echo -e "${Yellow}$strIn${Off}"
+                    fi
                 elif echo "$strIn" | grep 'Temperature:' >/dev/null; then
-                    echo -e "${Yellow}$strIn${Off}"
+                    if [[ $increased != "yes" ]]; then
+                        echo -e "${Yellow}$strIn${Off}"
+                    fi
                 elif echo "$strIn" | grep 'Percentage Used:' >/dev/null; then
-                    echo -e "${Yellow}$strIn${Off}"
+                    if [[ $increased != "yes" ]]; then
+                        echo -e "${Yellow}$strIn${Off}"
+                    fi
                 elif echo "$strIn" | grep 'Power On Hours:' >/dev/null; then
-                    echo -e "${Yellow}$strIn${Off}"
+                    if [[ $increased != "yes" ]]; then
+                        echo -e "${Yellow}$strIn${Off}"
+                    fi
                 elif echo "$strIn" | grep 'Unsafe Shutdowns:' >/dev/null; then
-                    echo -e "${Yellow}$strIn${Off}"
+                    if [[ $increased != "yes" ]]; then
+                        echo -e "${Yellow}$strIn${Off}"
+                    fi
                 elif echo "$strIn" | grep 'Media and Data Integrity Errors:' >/dev/null; then
-                    echo -e "${Yellow}$strIn${Off}"
+                    if [[ $increased != "yes" ]]; then
+                        echo -e "${Yellow}$strIn${Off}"
+                    fi
                 else
-                    echo "$strIn"
+                    if [[ $increased != "yes" ]]; then
+                        echo "$strIn"
+                    fi
                 fi
             else
                 # smartctl7 not installed
@@ -705,21 +820,37 @@ smart_nvme(){
                     # Remove commas and convert to TB/GB/MB
                     units_show="$(echo "${units//,}" | numfmt --to=si --suffix=B)"
                     # Show data_units read or written
-                    echo "$strIn  ($units_show)"
+                    if [[ $increased != "yes" ]]; then
+                        echo "$strIn  ($units_show)"
+                    fi
                 elif echo "$strIn" | grep 'critical_warning' >/dev/null; then
-                    echo -e "${Yellow}$strIn${Off}"
+                    if [[ $increased != "yes" ]]; then
+                        echo -e "${Yellow}$strIn${Off}"
+                    fi
                 elif echo "$strIn" | grep 'temperature' >/dev/null; then
-                    echo -e "${Yellow}$strIn${Off}"
+                    if [[ $increased != "yes" ]]; then
+                        echo -e "${Yellow}$strIn${Off}"
+                    fi
                 elif echo "$strIn" | grep 'percentage_used' >/dev/null; then
-                    echo -e "${Yellow}$strIn${Off}"
+                    if [[ $increased != "yes" ]]; then
+                        echo -e "${Yellow}$strIn${Off}"
+                    fi
                 elif echo "$strIn" | grep 'power_on_hours' >/dev/null; then
-                    echo -e "${Yellow}$strIn${Off}"
+                    if [[ $increased != "yes" ]]; then
+                        echo -e "${Yellow}$strIn${Off}"
+                    fi
                 elif echo "$strIn" | grep 'unsafe_shutdowns' >/dev/null; then
-                    echo -e "${Yellow}$strIn${Off}"
+                    if [[ $increased != "yes" ]]; then
+                        echo -e "${Yellow}$strIn${Off}"
+                    fi
                 elif echo "$strIn" | grep 'media_errors' >/dev/null; then
-                    echo -e "${Yellow}$strIn${Off}"
+                    if [[ $increased != "yes" ]]; then
+                        echo -e "${Yellow}$strIn${Off}"
+                    fi
                 else
-                    echo "$strIn"
+                    if [[ $increased != "yes" ]]; then
+                        echo "$strIn"
+                    fi
                 fi
             fi
         done
@@ -739,12 +870,23 @@ short_attibutes_nvme(){
     if [[ "$strIn" ]]; then
         var1="$3"
         var2=$(echo "$strIn" | cut -d":" -f2 | xargs)
+        var3=$(echo "$3" | awk '{print $2}')
+
         if [[ ${var2:0:1} -gt "0" && $2 == "zero" ]]; then
-            echo -e "${Yellow}$var1${Off} ${LiteRed}$var2${Off}"
+            log_bad_nvme "$var3" "$var2"
+            if [[ $increased != "yes" ]]; then
+                echo -e "${Yellow}$var1${Off} ${LiteRed}$var2${Off}$show_increased"
+            else
+                changed_atts+=("${Yellow}$var1${Off} ${LiteRed}$var2${Off}$show_increased")
+            fi
         elif [[ ${var2:0:1} -gt "0" && $2 == "none" ]]; then
-            echo -e "$var1 $var2"
+            if [[ $increased != "yes" ]]; then
+                echo -e "$var1 $var2"
+            fi
         else
-            echo -e "${Yellow}$var1${Off} $var2"
+            if [[ $increased != "yes" ]]; then
+                echo -e "${Yellow}$var1${Off} $var2"
+            fi
         fi
     fi
 }
@@ -765,16 +907,16 @@ show_health_nvme(){
             short_attibutes_nvme "temperature" none "  2 Temperature                 "
         elif [[ $nvme_att == "percentage_used" ]]; then
             # 5 Percentage Used
-            short_attibutes_nvme "percentage_used" none "  5 Percentage Used             "
+            short_attibutes_nvme "percentage_used" none "  5 Percentage_Used             "
         elif [[ $nvme_att == "power_on_hours" ]]; then
             # 12 Power On Hours
-            short_attibutes_nvme "power_on_hours" none " 12 Power On Hours              "
+            short_attibutes_nvme "power_on_hours" none " 12 Power_On_Hours              "
         elif [[ $nvme_att == "unsafe_shutdowns" ]]; then
             # 13 Unsafe Shutdowns
-            short_attibutes_nvme "unsafe_shutdowns" zero " 13 Unsafe Shutdowns            "
+            short_attibutes_nvme "unsafe_shutdowns" zero " 13 Unsafe_Shutdowns            "
         elif [[ $nvme_att == "media_errors" ]]; then
             # 14 Media Errors
-            short_attibutes_nvme "media_errors" zero " 14 Media Errors                "
+            short_attibutes_nvme "media_errors" zero " 14 Media_Errors                "
         fi
     done
 }
@@ -853,8 +995,22 @@ done
 
 if [[ -z "$errtotal" ]]; then errtotal=0 ; fi
 
+
+# Create smart.log file if needed
+smart_log="${logpath}"/smart.log
+if [[ ! -f $smart_log ]]; then
+    touch "$smart_log"
+    #echo -e "\n[newfile]\ndrive_num=" > "$smart_log"
+    chown root:root "$smart_log"
+    chmod 666 "$smart_log"
+fi
+
+
 # HDD and SSD
 for drive in "${drives[@]}"; do
+    # Empty array
+    changed_atts=()
+
     # Show drive model and serial
     get_drive_num
     show_drive_model
@@ -874,7 +1030,9 @@ for drive in "${drives[@]}"; do
         percentleft=$("$smartctl" -a -d sat -T permissive /dev/"$drive" | grep "  Self-test routine in progress" | cut -d " " -f9-13)
         if [[ $percentleft ]]; then
             hourselapsed=$("$smartctl" -a -d sat -T permissive /dev/"$drive" | grep "  Self-test routine in progress" | cut -d " " -f21)
-            echo "Drive $model $serial $percentleft remaining, $hourselapsed hours elapsed."
+            if [[ $increased != "yes" ]]; then
+                echo "Drive $model $serial $percentleft remaining, $hourselapsed hours elapsed."
+            fi
         else
             # Show drive health
             show_health
@@ -886,16 +1044,34 @@ for drive in "${drives[@]}"; do
         percentdone=$("$smartctl" -a -d sat -T permissive /dev/"$drive" | grep "ScanStatus" | cut -d " " -f3-4)
         if [[ $percentdone ]]; then
             hourselapsed=$("$smartctl" -a -d sat -T permissive /dev/"$drive" | grep "  Self-test routine in progress" | cut -d " " -f21)
-            echo "Drive $model $serial ${percentdone}% done."
+            if [[ $increased != "yes" ]]; then
+                echo "Drive $model $serial ${percentdone}% done."
+            fi
         else
             # Show drive health
             show_health
+        fi
+    fi
+
+    if [[ $increased == "yes" ]]; then
+        if [[ ${#changed_atts[@]} -gt "0" ]]; then
+            if echo "${changed_atts[*]}" | grep -q 'Increased'; then
+                echo -e "$show_drive_info"
+                for i in "${changed_atts[@]}"; do
+                    if echo "$i" | grep -q 'Increased'; then
+                        echo -e "$i"
+                    fi
+                done
+            fi
         fi
     fi
 done
 
 # NVMe drives
 for drive in "${nvmes[@]}"; do
+    # Empty array
+    changed_atts=()
+
     # Show drive model and serial
     get_nvme_num
     show_drive_model
@@ -904,11 +1080,17 @@ for drive in "${nvmes[@]}"; do
     if [[ $smartversion -gt "6" ]]; then
         strIn=$("$smartctl" -H /dev/"$drive" | grep 'health')
         if $(echo "$strIn" | grep -qi PASSED); then
-            echo -e "SMART overall-health self-assessment test result: ${LiteGreen}PASSED${Off}"
+            if [[ $increased != "yes" ]]; then
+                echo -e "SMART overall-health self-assessment test result: ${LiteGreen}PASSED${Off}"
+            fi
         elif $(echo "$strIn" | grep -qi 'Health Status: OK'); then
-            echo -e "SMART Health Status: ${LiteGreen}OK${Off}"
+            if [[ $increased != "yes" ]]; then
+                echo -e "SMART Health Status: ${LiteGreen}OK${Off}"
+            fi
         else
-            echo "$strIn"
+            if [[ $increased != "yes" ]]; then
+                echo "$strIn"
+            fi
         fi
     fi
 
@@ -925,9 +1107,26 @@ for drive in "${nvmes[@]}"; do
         # Show only important SMART attributes
         show_health_nvme
     fi
+
+    if [[ $increased == "yes" ]]; then
+        if [[ ${#changed_atts[@]} -gt "0" ]]; then
+            if echo "${changed_atts[*]}" | grep -q 'Increased'; then
+                echo -e "$show_drive_info"
+                for i in "${changed_atts[@]}"; do
+                    if echo "$i" | grep -q 'Increased'; then
+                        echo -e "$i"
+                    fi
+                done
+            fi
+        fi
+    fi
 done
 
-echo -e "\nFinished\n"
+if [[ $increased != "yes" ]]; then
+    echo -e "\nFinished\n"
+else
+    echo ""
+fi
 
 if [[ $warn -gt "0" ]]; then
     errtotal=$((errtotal +warn))
