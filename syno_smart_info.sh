@@ -24,7 +24,7 @@
 # https://github.com/Seagate/openSeaChest/wiki/Drive-Health-and-SMART
 #------------------------------------------------------------------------------
 
-scriptver="v1.4.23"
+scriptver="v1.4.24"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -173,6 +173,9 @@ echo "Using smartctl $("$smartctl" --version | head -1 | awk '{print $2}')"
 if [[ ${#args[@]} -gt "0" ]]; then
     echo "Using options: ${args[*]}"
 fi
+
+# Reset shell's SECONDS var to later show how long the script took
+SECONDS=0
 
 #------------------------------------------------------------------------------
 # Check latest release with GitHub API
@@ -532,13 +535,12 @@ log_bad(){
     var1_trimmed="$(echo "$var1" | xargs)"
     show_increased=""
     previous_att="$(get_section_key_value "$smart_log" "$serial" "$var1_trimmed")"
-    if [[ -z $previous_att ]] || [[ $previous_att == "0" ]]; then
+    if [[ -z $previous_att ]]; then
         # Create ini section if missing
         if ! grep "$serial" "$smart_log" > /dev/null; then
             echo -e "[${serial}]\ndrive_num=" >> "$smart_log"
         fi
         set_section_key_value "$smart_log" "$serial" "$var1_trimmed" "$var2"
-        show_increased=$'\\t'"Increased by $var2"
     elif [[ $var2 -gt "$previous_att" ]]; then
         set_section_key_value "$smart_log" "$serial" "$var1_trimmed" "$var2"
         show_increased=$'\\t'"Increased by $((var2 - previous_att))"
@@ -555,13 +557,12 @@ log_bad_nvme(){
     var3_trimmed="$(echo "$var3" | xargs)"
     show_increased=""
     previous_att="$(get_section_key_value "$smart_log" "$serial" "$var3_trimmed")"
-    if [[ -z $previous_att ]] || [[ $previous_att == "0" ]]; then
+    if [[ -z $previous_att ]]; then
         # Create ini section if missing
         if ! grep "$serial" "$smart_log" > /dev/null; then
             echo -e "[${serial}]\ndrive_num=" >> "$smart_log"
         fi
         set_section_key_value "$smart_log" "$serial" "$var3_trimmed" "$var2"
-        show_increased=$'\\t'"Increased by $var2"
     elif [[ $var2 -gt "$previous_att" ]]; then
         set_section_key_value "$smart_log" "$serial" "$var3_trimmed" "$var2"
         show_increased=$'\\t'"Increased by $((var2 - previous_att))"
@@ -1134,6 +1135,21 @@ if [[ $increased == "yes" ]]; then
         echo -e "\n${LiteGreen}No drives have increased important SMART attributes${Off}"
         warn=""
         errtotal="0"
+    fi
+fi
+
+# Show how long the script took
+end="$SECONDS"
+if [[ $debug == "yes" ]]; then
+    if [[ $color != "no" ]]; then
+        echo ""
+        if [[ $end -ge 3600 ]]; then
+            printf 'Duration: %dh %dm\n\n' $((end/3600)) $((end%3600/60))
+        elif [[ $end -ge 60 ]]; then
+            echo -e "Duration: $((end/60))m $((end%60))s"
+        else
+            echo -e "Duration: ${end} seconds"
+        fi
     fi
 fi
 
