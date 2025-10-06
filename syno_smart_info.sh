@@ -24,7 +24,7 @@
 # https://github.com/Seagate/openSeaChest/wiki/Drive-Health-and-SMART
 #------------------------------------------------------------------------------
 
-scriptver="v1.4.22"
+scriptver="v1.4.23"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -657,7 +657,6 @@ show_health(){
             "$smartctl" -l error -d "$drive_type" /dev/"$drive" | grep -iE 'not supported'
         fi
     elif [[ $errcount -gt "0" ]]; then
-    #elif [[ $errcount -eq "0" ]]; then  # debug
         errtotal=$((errtotal +errcount))
         if [[ $increased != "yes" ]]; then
             echo -e "SMART Error Counter Log:         ${LiteRed}$errcount${Off}"
@@ -694,7 +693,7 @@ show_health(){
                         short_attibutes "  1" none
                     fi
                 else
-                    short_attibutes "  1"
+                    short_attibutes "  1" zero
                 fi
             elif [[ ${strIn:0:3} == "  5" ]]; then
                 # 5 Reallocated sectors - scrutiny and BackBlaze
@@ -708,7 +707,7 @@ show_health(){
                         short_attibutes "  7" none
                     fi
                 else
-                    short_attibutes "  7"
+                    short_attibutes "  7" zero
                 fi
             elif [[ ${strIn:0:3} == "  9" ]]; then
                 # 9 Power on hours
@@ -737,7 +736,7 @@ show_health(){
                         short_attibutes "195" none
                     fi
                 else
-                    short_attibutes "195"
+                    short_attibutes "195" zero
                 fi
             elif [[ ${strIn:0:3} == "197" ]]; then
                 # 197 Current pending sectors - scrutiny and BackBlaze
@@ -765,7 +764,6 @@ smart_nvme(){
         errlog="$(nvme error-log "/dev/$drive" | grep error_count | uniq)"
         errcount="$(echo "$errlog" | awk '{print $3}')"
         if [[ $errcount -gt "0" ]]; then
-        #if [[ $errcount -eq "0" ]]; then  # debug
             errtotal=$((errtotal +errcount))
             if [[ $increased != "yes" ]]; then
                 echo -e "SMART Error Counter Log:         ${LiteRed}$errcount${Off}"
@@ -874,24 +872,25 @@ smart_nvme(){
 
 short_attibutes_nvme(){ 
     if [[ "$strIn" ]]; then
-        var1="$3"
-        var2=$(echo "$strIn" | cut -d":" -f2 | xargs)
-        var3=$(echo "$3" | awk '{print $2}')
+        var1="$4"                                       # display string
+        var2=$(echo "$strIn" | cut -d":" -f2 | xargs)   # value
+        var3=$(echo "$4" | awk '{print $1}')            # name
+        var4="$3"                                       # attribute number
 
         if [[ ${var2:0:1} -gt "0" && $2 == "zero" ]]; then
             log_bad_nvme "$var3" "$var2"
             if [[ $increased != "yes" ]]; then
-                echo -e "${Yellow}$var1${Off} ${LiteRed}$var2${Off}$show_increased"
+                echo -e "$var4 ${Yellow}$var1${Off} ${LiteRed}$var2${Off}$show_increased"
             else
-                changed_atts+=("${Yellow}$var1${Off} ${LiteRed}$var2${Off}$show_increased")
+                changed_atts+=("$var4 ${Yellow}$var1${Off} ${LiteRed}$var2${Off}$show_increased")
             fi
         elif [[ ${var2:0:1} -gt "0" && $2 == "none" ]]; then
             if [[ $increased != "yes" ]]; then
-                echo -e "$var1 $var2"
+                echo -e "$var4 $var1 $var2"
             fi
         else
             if [[ $increased != "yes" ]]; then
-                echo -e "${Yellow}$var1${Off} $var2"
+                echo -e "$var4 ${Yellow}$var1${Off} $var2"
             fi
         fi
     fi
@@ -907,22 +906,22 @@ show_health_nvme(){
 
         if [[ $nvme_att == "critical_warning" ]]; then
             # 1 Critical_Warning
-            short_attibutes_nvme "critical_warning" zero "  1 Critical_Warning            "
+            short_attibutes_nvme "critical_warning" zero "  1" "Critical_Warning            "
         elif [[ $nvme_att == "temperature" ]]; then
             # 2 Temperature - scrutiny
-            short_attibutes_nvme "temperature" none "  2 Temperature                 "
+            short_attibutes_nvme "temperature" none "  2" "Temperature                 "
         elif [[ $nvme_att == "percentage_used" ]]; then
             # 5 Percentage Used
-            short_attibutes_nvme "percentage_used" none "  5 Percentage_Used             "
+            short_attibutes_nvme "percentage_used" none "  5" "Percentage_Used             "
         elif [[ $nvme_att == "power_on_hours" ]]; then
             # 12 Power On Hours
-            short_attibutes_nvme "power_on_hours" none " 12 Power_On_Hours              "
+            short_attibutes_nvme "power_on_hours" none " 12" "Power_On_Hours              "
         elif [[ $nvme_att == "unsafe_shutdowns" ]]; then
             # 13 Unsafe Shutdowns
-            short_attibutes_nvme "unsafe_shutdowns" zero " 13 Unsafe_Shutdowns            "
+            short_attibutes_nvme "unsafe_shutdowns" zero " 13" "Unsafe_Shutdowns            "
         elif [[ $nvme_att == "media_errors" ]]; then
             # 14 Media Errors
-            short_attibutes_nvme "media_errors" zero " 14 Media_Errors                "
+            short_attibutes_nvme "media_errors" zero " 14" "Media_Errors                "
         fi
     done
 }
