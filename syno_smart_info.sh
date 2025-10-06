@@ -24,7 +24,7 @@
 # https://github.com/Seagate/openSeaChest/wiki/Drive-Health-and-SMART
 #------------------------------------------------------------------------------
 
-scriptver="v1.4.20"
+scriptver="v1.4.21"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -1056,6 +1056,7 @@ for drive in "${drives[@]}"; do
     if [[ $increased == "yes" ]]; then
         if [[ ${#changed_atts[@]} -gt "0" ]]; then
             if echo "${changed_atts[*]}" | grep -q 'Increased'; then
+                increased_count=$((increased_count +1))
                 echo -e "$show_drive_info"
                 for i in "${changed_atts[@]}"; do
                     if echo "$i" | grep -q 'Increased'; then
@@ -1111,6 +1112,7 @@ for drive in "${nvmes[@]}"; do
     if [[ $increased == "yes" ]]; then
         if [[ ${#changed_atts[@]} -gt "0" ]]; then
             if echo "${changed_atts[*]}" | grep -q 'Increased'; then
+                increased_count=$((increased_count +1))
                 echo -e "$show_drive_info"
                 for i in "${changed_atts[@]}"; do
                     if echo "$i" | grep -q 'Increased'; then
@@ -1122,7 +1124,15 @@ for drive in "${nvmes[@]}"; do
     fi
 done
 
-if [[ $increased != "yes" ]]; then
+if [[ $increased == "yes" ]]; then
+    if [[ -z $increased_count ]]; then
+        echo -e "\n${LiteGreen}No drives have increased important SMART attributes${Off}"
+        warn=""
+        errtotal="0"
+    fi
+fi
+
+if [[ $color != "no" ]]; then
     echo -e "\nFinished\n"
 else
     echo ""
