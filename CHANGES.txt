@@ -1,9 +1,9 @@
 v1.4.23
 - Added `-i, --increased` option to only show drives with important attributes that have changed.
   - Useful for when the script is scheduled so you only get sent an email when important attributes have increased or decreased.
-- Bug fix for NVMe important SMART attribute's number showing in yellow instead of white.
-- Bug fix for non-Seagate HDDs/SSDs not showing important SMART attribute's value in red if greater 0.
-- Bug fix for Seagate HDDs (and HAT3300) not showing important SMART attribute's value in red if greater 0 and smartctl 7 installed.
+- Bug fix for NVMe important SMART attribute's number showing in yellow instead of white when script run in default mode.
+- Bug fix for non-Seagate HDDs/SSDs not showing important SMART 1, 7 and 195 attribute's value in red if greater 0.
+- Bug fix for Seagate HDDs (and HAT3300) not showing important SMART 1, 7 and 195 attribute's value in red if greater 0 and smartctl 7 not installed.
 
 v1.3.19
 - Improved display of all attributes for NVMe drives.
