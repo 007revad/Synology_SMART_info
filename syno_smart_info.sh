@@ -24,7 +24,7 @@
 # https://github.com/Seagate/openSeaChest/wiki/Drive-Health-and-SMART
 #------------------------------------------------------------------------------
 
-scriptver="v1.4.21"
+scriptver="v1.4.22"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -532,16 +532,19 @@ log_bad(){
     var1_trimmed="$(echo "$var1" | xargs)"
     show_increased=""
     previous_att="$(get_section_key_value "$smart_log" "$serial" "$var1_trimmed")"
-    if [[ -z $previous_att ]]; then
+    if [[ -z $previous_att ]] || [[ $previous_att == "0" ]]; then
         # Create ini section if missing
         if ! grep "$serial" "$smart_log" > /dev/null; then
             echo -e "[${serial}]\ndrive_num=" >> "$smart_log"
         fi
         set_section_key_value "$smart_log" "$serial" "$var1_trimmed" "$var2"
-        show_increased="    Increased by $var2"
+        show_increased=$'\\t'"Increased by $var2"
     elif [[ $var2 -gt "$previous_att" ]]; then
         set_section_key_value "$smart_log" "$serial" "$var1_trimmed" "$var2"
-        show_increased="    Increased by $((var2 - previous_att))"
+        show_increased=$'\\t'"Increased by $((var2 - previous_att))"
+    elif [[ $var2 -lt "$previous_att" ]]; then
+        set_section_key_value "$smart_log" "$serial" "$var1_trimmed" "$var2"
+        show_increased=$'\\t'"Decreased by $((previous_att - var2))"
     fi
 }
 
@@ -552,16 +555,19 @@ log_bad_nvme(){
     var3_trimmed="$(echo "$var3" | xargs)"
     show_increased=""
     previous_att="$(get_section_key_value "$smart_log" "$serial" "$var3_trimmed")"
-    if [[ -z $previous_att ]]; then
+    if [[ -z $previous_att ]] || [[ $previous_att == "0" ]]; then
         # Create ini section if missing
         if ! grep "$serial" "$smart_log" > /dev/null; then
             echo -e "[${serial}]\ndrive_num=" >> "$smart_log"
         fi
         set_section_key_value "$smart_log" "$serial" "$var3_trimmed" "$var2"
-        show_increased="    Increased by $var2"
+        show_increased=$'\\t'"Increased by $var2"
     elif [[ $var2 -gt "$previous_att" ]]; then
         set_section_key_value "$smart_log" "$serial" "$var3_trimmed" "$var2"
-        show_increased="    Increased by $((var2 - previous_att))"
+        show_increased=$'\\t'"Increased by $((var2 - previous_att))"
+    elif [[ $var2 -lt "$previous_att" ]]; then
+        set_section_key_value "$smart_log" "$serial" "$var1_trimmed" "$var2"
+        show_increased=$'\\t'"Decreased by $((previous_att - var2))"
     fi
 }
 
@@ -1055,11 +1061,11 @@ for drive in "${drives[@]}"; do
 
     if [[ $increased == "yes" ]]; then
         if [[ ${#changed_atts[@]} -gt "0" ]]; then
-            if echo "${changed_atts[*]}" | grep -q 'Increased'; then
+            if echo "${changed_atts[*]}" | grep -q -E 'Increased|Decreased'; then
                 increased_count=$((increased_count +1))
                 echo -e "$show_drive_info"
                 for i in "${changed_atts[@]}"; do
-                    if echo "$i" | grep -q 'Increased'; then
+                    if echo "$i" | grep -q -E 'Increased|Decreased'; then
                         echo -e "$i"
                     fi
                 done
@@ -1111,11 +1117,11 @@ for drive in "${nvmes[@]}"; do
 
     if [[ $increased == "yes" ]]; then
         if [[ ${#changed_atts[@]} -gt "0" ]]; then
-            if echo "${changed_atts[*]}" | grep -q 'Increased'; then
+            if echo "${changed_atts[*]}" | grep -q -E 'Increased|Decreased'; then
                 increased_count=$((increased_count +1))
                 echo -e "$show_drive_info"
                 for i in "${changed_atts[@]}"; do
-                    if echo "$i" | grep -q 'Increased'; then
+                    if echo "$i" | grep -q -E 'Increased|Decreased'; then
                         echo -e "$i"
                     fi
                 done
