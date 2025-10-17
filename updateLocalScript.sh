@@ -21,7 +21,7 @@ function err() {
 function cleanup() {
     local rc=$1
     rm "$TMP_FILENAME" &>/dev/null || true
-    (( $rc )) && { echo "??? $FILENAME updated failed"; exit 1; } || { echo "--- $FILENAME updated successfully"; exit 0; }
+    (( $rc )) && { echo "??? $FILENAME update failed"; exit 1; } || { echo "--- $FILENAME update successfully"; exit 0; }
 }
 
 # *** MAIN ***
@@ -29,16 +29,23 @@ function cleanup() {
 trap 'cleanup $?' SIGINT SIGTERM SIGHUP EXIT
 trap 'err $?' ERR
 
-if (( $# == 1 )); then
+if (( $# == 1 )); then		# directory was passed
     INSTALL_DIR="$1"
-    INSTALL_FILENAME="${INSTALL_DIR}/${FILENAME}"
-    if [[ ! -f $INSTALL_FILENAME ]]; then
-        echo "??? $INSTALL_FILENAME not found"
-        exit 1
+elif [[ -e ./$FILENAME ]]; then	# check in current dir
+    INSTALL_DIR="."
+fi
+
+if [[ -z $INSTALL_DIR ]]; then	# check in path
+    if [[ ! INSTALL_FILENAME=$(which $FILENAME) ]]; then
+      echo "??? $FILENAME not found"
+      echo "--- Pass the installation directory as argument"
+      exit 1
     fi
-elif ! INSTALL_FILENAME=$(which $FILENAME); then
-    echo "??? $FILENAME not found"
-    echo "--- Pass the installation directory as argument"
+fi
+
+INSTALL_FILENAME="$INSTALL_DIR/$FILENAME"
+if [[ ! -f $INSTALL_FILENAME ]]; then
+    echo "??? $INSTALL_FILENAME not found"
     exit 1
 fi
 
