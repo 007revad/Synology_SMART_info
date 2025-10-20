@@ -24,7 +24,7 @@
 # https://github.com/Seagate/openSeaChest/wiki/Drive-Health-and-SMART
 #------------------------------------------------------------------------------
 
-scriptver="v1.4.25"
+scriptver="v1.4.26"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -1189,11 +1189,33 @@ fi
 for drive in "${drives[@]}"; do
     get_drive_num
     drive_number="$(echo "$drive_num" | xargs)"
-    drives_temp+=("${drive_number:?},${drive:?}")
+
+    if ! echo "$drive_number" | grep -q -E 'DX|RX|FX'; then
+        drives_temp+=("${drive_number:?},${drive:?}")
+    else
+        eunit_drives_temp+=("${drive_number:?},${drive:?}")
+    fi
 done
+
+# Internal HDD/SSD drives
 IFS=$'\n'
 drives_sorted=($(sort <<<"${drives_temp[*]}"))  # Sort array
 unset IFS
+
+# HDD/SSD drives in eunits
+IFS=$'\n'
+eunit_drives_sorted=($(sort <<<"${eunit_drives_temp[*]}"))  # Sort array
+unset IFS
+
+# HDD/SSD drives in eunits part 2
+IFS=$'\n'
+eunits_drives_sorted=($(sort -t"-" -k2,2 <<<"${eunit_drives_sorted[*]}"))  # Sort array
+unset IFS
+
+# Append eunit_drives_sorted to drives_sorted
+for d in "${eunits_drives_sorted[@]}"; do
+    drives_sorted+=("$d")
+done
 
 # HDD and SSD
 #for drive in "${drives[@]}"; do
