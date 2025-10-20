@@ -24,7 +24,7 @@
 # https://github.com/Seagate/openSeaChest/wiki/Drive-Health-and-SMART
 #------------------------------------------------------------------------------
 
-scriptver="v1.4.24"
+scriptver="v1.4.25"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -269,12 +269,15 @@ log_drive(){
     # $3 is "$model"
     # $4 is "/dev/$drive"    
 
-    # set_section_key_value bugs
+    # set_section_key_value has bugs
     # It cannot create a new section
     # It cannot write keys if no key/value pair exist below section
-    # So we echo the section with a dummy key/value pair
+    # So we echo the section with a key/value pair
+
+    first_run=""
     if ! grep '\['"$1"'\]' "$smart_log" >/dev/null; then
         echo -e "[${serial}]\ndrive_num=" >> "$smart_log"
+        first_run="yes"
     fi
     set_section_key_value "$smart_log" "$1" drive_num "$2"
     set_section_key_value "$smart_log" "$1" model "$3"
@@ -301,7 +304,7 @@ show_drive_model(){
     # Get drive serial number with smartctl for USB drives
 #    if [[ -z "$serial" && "${drive:0:4}" != "nvme" ]]; then
     if [[ -z "$serial" ]]; then
-        serial=$("$smartctl" -i -d sat /dev/"$drive" | grep Serial | cut -d":" -f2 | xargs)
+        serial=$("$smartctl" -i -d "$drive_type" /dev/"$drive" | grep Serial | cut -d":" -f2 | xargs)
     fi
 
     # Show drive model and serial
@@ -502,7 +505,7 @@ smart_all(){
     if [[ $seagate == "yes" ]] && [[ $smartversion == 7 ]]; then
         # Get all attributes, skip built-in header (first 6 lines), then drop “ID#” header
         readarray -t att_array < <(
-            "$smartctl" -A -f brief -d sat -T permissive \
+            "$smartctl" -A -f brief -d "$drive_type" -T permissive \
                 -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 "/dev/$drive" \
             | tail -n +7 \
             | grep -v '^ID#'
@@ -510,7 +513,7 @@ smart_all(){
     else
         # Same for non-Seagate drives
         readarray -t att_array < <(
-            "$smartctl" -A -f brief -d sat -T permissive "/dev/$drive" \
+            "$smartctl" -A -f brief -d "$drive_type" -T permissive "/dev/$drive" \
             | tail -n +7 \
             | grep -v '^ID#'
         )
@@ -527,10 +530,23 @@ smart_all(){
 
 log_bad(){ 
     # $1 is "197 Current_Pending_Sector  0x0032   200   200   000    Old_age   Always       -       52"
+    # $1 for SAS is "Elements in grown defect list: 0"
     local var1
     local var2
-    var1=$(echo "$1" | awk '{printf "%-28s", $2}')
-    var2=$(echo "$1" | awk '{printf $10}' | awk -F"+" '{print $1}' | cut -d"h" -f1)
+    if [[ $drive_type == "scsi" ]]; then  # SAS drive
+        # Get attribute name
+        #var1=$(echo "$strIn" | awk -F':' '{printf $1}')
+        var1=$(echo "$1" | awk -F':' '{printf $1}')
+        # Get attribute value
+        #var2=$(echo "$strIn" | awk -F':' '{printf $2}' | xargs)
+        var2=$(echo "$1" | awk -F':' '{printf $2}' | xargs)
+    else
+        # Get attribute name
+        #var1=$(echo "$1" | awk '{printf "%-28s", $2}')
+        var1=$(echo "$1" | awk '{printf $2}')
+        # Get attribute value
+        var2=$(echo "$1" | awk '{printf $10}' | awk -F"+" '{print $1}' | cut -d"h" -f1)
+    fi
 
     var1_trimmed="$(echo "$var1" | xargs)"
     show_increased=""
@@ -547,6 +563,11 @@ log_bad(){
     elif [[ $var2 -lt "$previous_att" ]]; then
         set_section_key_value "$smart_log" "$serial" "$var1_trimmed" "$var2"
         show_increased=$'\\t'"Decreased by $((previous_att - var2))"
+    fi
+
+    # Don't show "Increased by #" or " Decreased by #" if first time adding the drive to smart.log
+    if [[ $first_run == "yes" ]]; then
+        show_increased=""
     fi
 }
 
@@ -567,33 +588,70 @@ log_bad_nvme(){
         set_section_key_value "$smart_log" "$serial" "$var3_trimmed" "$var2"
         show_increased=$'\\t'"Increased by $((var2 - previous_att))"
     elif [[ $var2 -lt "$previous_att" ]]; then
-        set_section_key_value "$smart_log" "$serial" "$var1_trimmed" "$var2"
+        set_section_key_value "$smart_log" "$serial" "$var3_trimmed" "$var2"
         show_increased=$'\\t'"Decreased by $((previous_att - var2))"
+    fi
+
+    # Don't show "Increased by #" or " Decreased by #" if first time adding the drive to smart.log
+    if [[ $first_run == "yes" ]]; then
+        show_increased=""
     fi
 }
 
 short_attibutes(){ 
+    # $1 is space padded attribute number like "  5" or "199"
+    # $2 is "zero" or "none"
+    # $3 is SAS attribute name with padding like "Elements in grown defect list: "
+    # $strIn is like "199 UDMA_CRC_Error_Count    0x003e   200   200   000    Old_age   Always       -       0"
+    local num
+    if [[ $1 == "_" ]]; then
+        num=""
+    else
+        num="$1 "
+    fi
+
     if [[ "$strIn" ]]; then
-        var1=$(echo "$strIn" | awk '{printf "%-28s", $2}')
-        var2=$(echo "$strIn" | awk '{printf $10}' | awk -F"+" '{print $1}' | cut -d"h" -f1)
-        if [[ ${var2:0:1} -gt "0" && $2 == "zero" ]]; then
+        if [[ $drive_type == "scsi" ]]; then  # SAS drive
+            var1="$3"
+            # Get attribute value
+            var2=$(echo "$strIn" | awk -F':' '{printf $2}' | xargs)
+        else
+            # Get attribute name with padding like "UDMA_CRC_Error_Count        "
+            var1=$(echo "$strIn" | awk '{printf "%-28s", $2}')
+            # Get attribute value
+            var2=$(echo "$strIn" | awk '{printf $10}' | awk -F"+" '{print $1}' | cut -d"h" -f1)
+        fi
+
+        # Remove % from Percentage_Used
+        #var2="${var2//%/}"  # Currently not used
+
+        if [[ $2 == "zero" && "${var2:0:1}" -gt "0" ]]; then
+            # Log important attributes with raw value greater than 0
             if [[ $var2 -gt "0" ]]; then
                 warn=$((warn +1))
+                # Log important attributes that should be zero but have raw value greater than 0
                 log_bad "$strIn"
             fi
             if [[ $increased != "yes" ]]; then
-                echo -e "$1 ${Yellow}$var1${Off} ${LiteRed}$var2${Off}$show_increased"
+                echo -e "$num${Yellow}$var1${Off} ${LiteRed}$var2${Off}$show_increased"
+            elif [[ $first_run == "yes" ]]; then
+                new_atts+=("$num${Yellow}$var1${Off} ${LiteRed}$var2${Off}")
             else
-                changed_atts+=("$1 ${Yellow}$var1${Off} ${LiteRed}$var2${Off}$show_increased")
+                changed_atts+=("$num${Yellow}$var1${Off} ${LiteRed}$var2${Off}$show_increased")
             fi
-        elif [[ ${var2:0:1} -gt "0" && $2 == "none" ]]; then
+        elif [[ $2 == "none" && "${var2:0:1}" -gt "0" ]]; then
             if [[ $increased != "yes" ]]; then
-                echo -e "$1 $var1 $var2"
+                echo -e "$num$var1 $var2"
             fi
         else
             if [[ $increased != "yes" ]]; then
-                echo -e "$1 ${Yellow}$var1${Off} $var2"
+                echo -e "$num${Yellow}$var1${Off} $var2"
             fi
+        fi
+
+        # Log important attributes with 0 raw value
+        if [[ $2 == "zero" && $var2 -eq "0" ]]; then
+            log_bad "$strIn"
         fi
     fi
 }
@@ -632,7 +690,7 @@ show_health(){
                     fi
                 elif $(echo "$strIn" | grep -qi 'Health Status: OK'); then
                     if [[ $increased != "yes" ]]; then
-                        echo -e "SMART Health Status: ${LiteGreen}OK${Off}"
+                        echo -e "SMART Health Status:                ${LiteGreen}OK${Off}"
                     fi
                 else
                     if [[ $increased != "yes" ]]; then
@@ -647,111 +705,211 @@ show_health(){
     #"$smartctl" -l error /dev/"$drive" | grep -iE 'error.*logg'
 
     # Retrieve Error Log and show error count
-    errlog="$("$smartctl" -l error -d "$drive_type" /dev/"$drive" | grep -iE 'error.*logg')"
-    errcount="$(echo "$errlog" | awk '{print $3}')"
-    if [[ -z $errlog ]]; then
-        errlog="$("$smartctl" -l error -d "$drive_type" /dev/"$drive" | grep -iE 'error count')"
-        errcount="$(echo "$errlog" | awk '{print $4}')"
-    fi
-    if [[ -z $errcount ]]; then
-        if [[ $increased != "yes" ]]; then
-            "$smartctl" -l error -d "$drive_type" /dev/"$drive" | grep -iE 'not supported'
+    if [[ $drive_type != "scsi" ]]; then  # Not SAS drive
+        errlog="$("$smartctl" -l error -d "$drive_type" /dev/"$drive" | grep -iE 'error.*logg')"
+        errcount="$(echo "$errlog" | awk '{print $3}')"
+        if [[ -z $errlog ]]; then
+            errlog="$("$smartctl" -l error -d "$drive_type" /dev/"$drive" | grep -iE 'error count')"
+            errcount="$(echo "$errlog" | awk '{print $4}')"
         fi
-    elif [[ $errcount -gt "0" ]]; then
-        errtotal=$((errtotal +errcount))
-        if [[ $increased != "yes" ]]; then
-            echo -e "SMART Error Counter Log:         ${LiteRed}$errcount${Off}"
+        if [[ -z $errcount ]]; then
+            if [[ $increased != "yes" ]]; then
+                "$smartctl" -l error -d "$drive_type" /dev/"$drive" | grep -iE 'not supported'
+            fi
+        elif [[ $errcount -gt "0" ]]; then
+            errtotal=$((errtotal +errcount))
+            if [[ $increased != "yes" ]]; then
+                echo -e "SMART Error Counter Log:         ${LiteRed}$errcount${Off}"
+            fi
+        else
+            if [[ $increased != "yes" ]]; then
+                echo -e "SMART Error Counter Log:         ${LiteGreen}No Errors Logged${Off}"
+            fi
         fi
     else
-        if [[ $increased != "yes" ]]; then
-            echo -e "SMART Error Counter Log:         ${LiteGreen}No Errors Logged${Off}"
-        fi
+        # SAS drive
+        readarray -t sas_errlog_array < <("$smartctl" -d "$drive_type" --all /dev/"$drive")
+        for e in "${sas_errlog_array[@]}"; do
+            nameA=""
+            nameB=""
+            valA=""
+            valB=""
+            if echo "$e" | grep -E '^read:' >/dev/null; then
+                nameA="Total uncorrected read errors:      "
+                valA=$(echo "$e" | awk '{printf $8}')
+                nameB="Total corrected read errors:        "
+                valB=$(echo "$e" | awk '{printf $5}')
+            elif echo "$e" | grep -E '^write:' >/dev/null; then
+                nameA="Total uncorrected write errors:     "
+                valA=$(echo "$e" | awk '{printf $8}')
+                nameB="Total corrected write errors:       "
+                valB=$(echo "$e" | awk '{printf $5}')
+            elif echo "$e" | grep -E '^verify:' >/dev/null; then
+                nameA="Total uncorrected verify errors:    "
+                valA=$(echo "$e" | awk '{printf $8}')
+                nameB="Total corrected verify errors:      "
+                valB=$(echo "$e" | awk '{printf $5}')
+            fi
+
+            # Total uncorrected read/write/verify errors
+            if [[ -n $nameA ]] && [[ -n $valA ]]; then  # Don't echo blank line
+                if [[ $valA -gt "0" ]]; then
+                    if [[ $increased != "yes" ]]; then
+                        echo -e "${nameA}${LiteRed}$valA${Off}"
+                    fi
+                else
+                    if [[ $increased != "yes" ]]; then
+                        echo -e "${nameA}${valA}"
+                    fi
+                fi
+            fi
+
+            # Total corrected read/write/verify errors
+            if [[ -n $nameB ]] && [[ -n $valB ]]; then  # Don't echo blank line
+                if [[ $valB -gt "0" ]]; then
+                    if [[ $increased != "yes" ]]; then
+                        echo -e "${nameB}${LiteRed}$valB${Off}"
+                    fi
+                else
+                    if [[ $increased != "yes" ]]; then
+                        echo -e "${nameB}${valB}"
+                    fi
+                fi
+            fi
+        done
     fi
 
     # Show SMART attributes
-    health=$("$smartctl" -H -d sat -T permissive /dev/"$drive" | tail -n +5)
-    if ! echo "$health" | grep PASSED >/dev/null || [[ $all == "yes" ]]; then
-        # Show all SMART attributes if health != passed, or -a/--all option used
+    health_bad=""
+    if [[ $drive_type == "scsi" ]]; then  # SAS drive
+        health=$("$smartctl" -H -d "$drive_type" -T permissive /dev/"$drive" | tail -n +5)
+        if ! echo "$health" | grep -E 'SMART Health Status.*OK' >/dev/null; then
+            # Show all SMART attributes
+            health_bad="yes"
+        fi
+    else  # SATA drive
+        health=$("$smartctl" -H -d "$drive_type" -T permissive /dev/"$drive" | tail -n +5)
+        if ! echo "$health" | grep PASSED >/dev/null; then
+            # Show all SMART attributes
+            health_bad="yes"
+        fi
+    fi
+
+    if [[ $health_bad == "yes" ]] || [[ $all == "yes" ]]; then
+        # Show all SMART attributes if health-bad == yes, or -a/--all option used
         smart_all
     else
         # Show only important SMART attributes
         if [[ $seagate == "yes" ]] && [[ $smartversion == 7 ]]; then
-            readarray -t smart_atts < <("$smartctl" -A -d sat -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 /dev/"$drive")
+            readarray -t smart_atts < <("$smartctl" -A -d "$drive_type" -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 /dev/"$drive")
         else
-            readarray -t smart_atts < <("$smartctl" -A -d sat /dev/"$drive")
+            readarray -t smart_atts < <("$smartctl" -A -d "$drive_type" /dev/"$drive")
         fi
         # Decide if show airflow temperature
-        if echo "${smart_atts[*]}" | grep -c '194 Temp' >/dev/null; then
+        if echo "${smart_atts[*]}" | grep -c -E '194.*Temp' >/dev/null; then
+            att194=yes
+        elif echo "${smart_atts[*]}" | grep -c 'Current Drive Temp' >/dev/null; then
             att194=yes
         fi
+
+        sas_attibutes=()
         for strIn in "${smart_atts[@]}"; do
-            if [[ ${strIn:0:3} == "  1" ]]; then
-                # 1 Raw read error rate
-                if [[ $seagate == "yes" ]]; then
-                    if [[ $smartversion == 7 ]]; then
+            if [[ $drive_type == "scsi" ]]; then  # SAS drive
+                if [[ $strIn =~ "Elements in grown defect list" ]]; then
+                    # 5 Elements in grown defect list
+                    #short_attibutes "  5" zero "Elements in grown defect list: "
+                    sas_attibutes+=("  5,zero,Elements in grown defect list: ,$strIn")
+
+                elif [[ $strIn =~ "Current Drive Temperature" ]]; then
+                    # 194 Current Drive Temperature
+                    #short_attibutes "194" none "Current Drive Temperature:     "
+                    sas_attibutes+=("194,none,Current Drive Temperature:     ,$strIn")
+                fi
+
+            else  # SATA drive
+                if [[ ${strIn:0:3} == "  1" ]]; then
+                    # 1 Raw read error rate
+                    if [[ $seagate == "yes" ]]; then
+                        if [[ $smartversion == 7 ]]; then
+                            short_attibutes "  1" zero
+                        else
+                            short_attibutes "  1" none
+                        fi
+                    else
                         short_attibutes "  1" zero
-                    else
-                        short_attibutes "  1" none
                     fi
-                else
-                    short_attibutes "  1" zero
-                fi
-            elif [[ ${strIn:0:3} == "  5" ]]; then
-                # 5 Reallocated sectors - scrutiny and BackBlaze
-                short_attibutes "  5" zero
-            elif [[ ${strIn:0:3} == "  7" ]]; then
-                # 7 Seek_Error_Rate
-                if [[ $seagate == "yes" ]]; then
-                    if [[ $smartversion == 7 ]]; then
+                elif [[ ${strIn:0:3} == "  5" ]]; then
+                    # 5 Reallocated sectors - scrutiny and BackBlaze
+                    short_attibutes "  5" zero
+                elif [[ ${strIn:0:3} == "  7" ]]; then
+                    # 7 Seek_Error_Rate
+                    if [[ $seagate == "yes" ]]; then
+                        if [[ $smartversion == 7 ]]; then
+                            short_attibutes "  7" zero
+                        else
+                            short_attibutes "  7" none
+                        fi
+                    else
                         short_attibutes "  7" zero
-                    else
-                        short_attibutes "  7" none
                     fi
-                else
-                    short_attibutes "  7" zero
-                fi
-            elif [[ ${strIn:0:3} == "  9" ]]; then
-                # 9 Power on hours
-                short_attibutes "  9" none
-            elif [[ ${strIn:0:3} == " 10" ]]; then
-                # 10 Spin_Retry_Count - scrutiny
-                short_attibutes " 10" none
-            elif [[ ${strIn:0:3} == "187" ]]; then
-                # 187 Current pending sectors - BackBlaze
-                short_attibutes "187" zero
-            elif [[ ${strIn:0:3} == "188" ]]; then
-                # 188 Current pending sectors - BackBlaze
-                short_attibutes "188" zero
-            elif [[ ${strIn:0:3} == "190" && -z $att194 ]]; then
-                # 190 Airflow_Temperature
-                short_attibutes "190" none
-            elif [[ ${strIn:0:3} == "194" ]]; then
-                # 194 Temperature - scrutiny
-                short_attibutes "194" none
-            elif [[ ${strIn:0:3} == "195" ]]; then
-                # 195 Hardware_ECC_Recovered aka ECC_On_the_Fly_Count
-                if [[ $seagate == "yes" ]]; then
-                    if [[ $smartversion == 7 ]]; then
+                elif [[ ${strIn:0:3} == "  9" ]]; then
+                    # 9 Power on hours
+                    short_attibutes "  9" none
+                elif [[ ${strIn:0:3} == " 10" ]]; then
+                    # 10 Spin_Retry_Count - scrutiny
+                    short_attibutes " 10" zero
+                elif [[ ${strIn:0:3} == "187" ]]; then
+                    # 187 Current pending sectors - BackBlaze
+                    short_attibutes "187" zero
+                elif [[ ${strIn:0:3} == "188" ]]; then
+                    # 188 Current pending sectors - BackBlaze
+                    short_attibutes "188" zero
+                elif [[ ${strIn:0:3} == "190" && -z $att194 ]]; then
+                    # 190 Airflow_Temperature
+                    short_attibutes "190" none
+                elif [[ ${strIn:0:3} == "194" ]]; then
+                    # 194 Temperature - scrutiny
+                    short_attibutes "194" none
+                elif [[ ${strIn:0:3} == "195" ]]; then
+                    # 195 Hardware_ECC_Recovered aka ECC_On_the_Fly_Count
+                    if [[ $seagate == "yes" ]]; then
+                        if [[ $smartversion == 7 ]]; then
+                            short_attibutes "195" zero
+                        else
+                            short_attibutes "195" none
+                        fi
+                    else
                         short_attibutes "195" zero
-                    else
-                        short_attibutes "195" none
                     fi
-                else
-                    short_attibutes "195" zero
+                elif [[ ${strIn:0:3} == "197" ]]; then
+                    # 197 Current pending sectors - scrutiny and BackBlaze
+                    short_attibutes "197" zero
+                elif [[ ${strIn:0:3} == "198" ]]; then
+                    # 198 Offline uncorrectable - scrutiny and BackBlaze
+                    short_attibutes "198" zero
+                elif [[ ${strIn:0:3} == "199" ]]; then
+                    # 199 UDMA_CRC_Error_Count
+                    short_attibutes "199" zero
+                elif [[ ${strIn:0:3} == "200" ]]; then
+                    # 200 Multi_Zone_Error_Rate - WD
+                    short_attibutes "200" zero
                 fi
-            elif [[ ${strIn:0:3} == "197" ]]; then
-                # 197 Current pending sectors - scrutiny and BackBlaze
-                short_attibutes "197" zero
-            elif [[ ${strIn:0:3} == "198" ]]; then
-                # 198 Offline uncorrectable - scrutiny and BackBlaze
-                short_attibutes "198" zero
-            elif [[ ${strIn:0:3} == "199" ]]; then
-                # 199 UDMA_CRC_Error_Count
-                short_attibutes "199" zero
-            elif [[ ${strIn:0:3} == "200" ]]; then
-                # 200 Multi_Zone_Error_Rate - WD
-                short_attibutes "200" zero
             fi
+        done
+
+        # Sort SAS smart attributes by ID number
+        sas_attibutes_sorted=()
+        IFS=$'\n'
+        sas_attibutes_sorted=($(sort -g <<<"${sas_attibutes[*]}"))  # Sort array
+        unset IFS
+
+        # Show SAS smart attributes sorted by ID number
+        for att in "${sas_attibutes_sorted[@]}"; do
+            arg1="$(echo "$att" | cut -d',' -f1)"
+            arg2="$(echo "$att" | cut -d',' -f2)"
+            arg3="$(echo "$att" | cut -d',' -f3)"
+            strIn="$(echo "$att" | cut -d',' -f4)"
+            short_attibutes "$arg1" "$arg2" "$arg3"
         done
     fi
 }
@@ -872,26 +1030,42 @@ smart_nvme(){
 }
 
 short_attibutes_nvme(){ 
+    # $1 is like "critical_warning"
+    # $2 is "zero" or "none"
+    # $3 is space padded attribute number like "  5" or "199"
+    # $4 is attribute name with padding like "Unsafe_Shutdowns            "
+    # $strIn is like "critical_warning                    : 0"
     if [[ "$strIn" ]]; then
         var1="$4"                                       # display string
         var2=$(echo "$strIn" | cut -d":" -f2 | xargs)   # value
         var3=$(echo "$4" | awk '{print $1}')            # name
         var4="$3"                                       # attribute number
 
-        if [[ ${var2:0:1} -gt "0" && $2 == "zero" ]]; then
+        # Remove % from Percentage_Used
+        #var2="${var2//%/}"  # Currently not used
+
+        if [[ $2 == "zero" && "${var2:0:1}" -gt "0" ]]; then
             log_bad_nvme "$var3" "$var2"
             if [[ $increased != "yes" ]]; then
                 echo -e "$var4 ${Yellow}$var1${Off} ${LiteRed}$var2${Off}$show_increased"
+            elif [[ $first_run == "yes" ]]; then
+                new_atts+=("$var4 ${Yellow}$var1${Off} ${LiteRed}$var2${Off}")
             else
                 changed_atts+=("$var4 ${Yellow}$var1${Off} ${LiteRed}$var2${Off}$show_increased")
             fi
-        elif [[ ${var2:0:1} -gt "0" && $2 == "none" ]]; then
+        elif [[  $2 == "none" && "${var2:0:1}" -gt "0" ]]; then
             if [[ $increased != "yes" ]]; then
                 echo -e "$var4 $var1 $var2"
             fi
         else
             if [[ $increased != "yes" ]]; then
                 echo -e "$var4 ${Yellow}$var1${Off} $var2"
+            fi
+        fi
+
+        if [[ $var2 =~ ^[0-9]+$ ]]; then
+            if [[ $2 == "zero" && $var2 -eq "0" ]]; then
+                log_bad_nvme "$var3" "$var2"
             fi
         fi
     fi
@@ -1006,16 +1180,30 @@ if [[ -z "$errtotal" ]]; then errtotal=0 ; fi
 smart_log="${logpath}"/smart.log
 if [[ ! -f $smart_log ]]; then
     touch "$smart_log"
-    #echo -e "\n[newfile]\ndrive_num=" > "$smart_log"
     chown root:root "$smart_log"
     chmod 666 "$smart_log"
 fi
 
 
-# HDD and SSD
+# Sort HDD and SSD devices by DSM drive name
 for drive in "${drives[@]}"; do
-    # Empty array
+    get_drive_num
+    drive_number="$(echo "$drive_num" | xargs)"
+    drives_temp+=("${drive_number:?},${drive:?}")
+done
+IFS=$'\n'
+drives_sorted=($(sort <<<"${drives_temp[*]}"))  # Sort array
+unset IFS
+
+# HDD and SSD
+#for drive in "${drives[@]}"; do
+for d in "${drives_sorted[@]}"; do
+    # Get drive from 'drive num,drive' in $d
+    drive="${d#*,}"
+
+    # Empty arrays
     changed_atts=()
+    new_atts=()
 
     # Show drive model and serial
     get_drive_num
@@ -1033,9 +1221,9 @@ for drive in "${drives[@]}"; do
         # DSM 7 or newer
 
         # Show SMART test status if SMART test running
-        percentleft=$("$smartctl" -a -d sat -T permissive /dev/"$drive" | grep "  Self-test routine in progress" | cut -d " " -f9-13)
+        percentleft=$("$smartctl" -a -d "$drive_type" -T permissive /dev/"$drive" | grep "  Self-test routine in progress" | cut -d " " -f9-13)
         if [[ $percentleft ]]; then
-            hourselapsed=$("$smartctl" -a -d sat -T permissive /dev/"$drive" | grep "  Self-test routine in progress" | cut -d " " -f21)
+            hourselapsed=$("$smartctl" -a -d "$drive_type" -T permissive /dev/"$drive" | grep "  Self-test routine in progress" | cut -d " " -f21)
             if [[ $increased != "yes" ]]; then
                 echo "Drive $model $serial $percentleft remaining, $hourselapsed hours elapsed."
             fi
@@ -1047,9 +1235,9 @@ for drive in "${drives[@]}"; do
         # DSM 6 or older
 
         # Show SMART test status if SMART test running
-        percentdone=$("$smartctl" -a -d sat -T permissive /dev/"$drive" | grep "ScanStatus" | cut -d " " -f3-4)
+        percentdone=$("$smartctl" -a -d "$drive_type" -T permissive /dev/"$drive" | grep "ScanStatus" | cut -d " " -f3-4)
         if [[ $percentdone ]]; then
-            hourselapsed=$("$smartctl" -a -d sat -T permissive /dev/"$drive" | grep "  Self-test routine in progress" | cut -d " " -f21)
+            hourselapsed=$("$smartctl" -a -d "$drive_type" -T permissive /dev/"$drive" | grep "  Self-test routine in progress" | cut -d " " -f21)
             if [[ $increased != "yes" ]]; then
                 echo "Drive $model $serial ${percentdone}% done."
             fi
@@ -1072,15 +1260,60 @@ for drive in "${drives[@]}"; do
             fi
         fi
     fi
+
+    if [[ $first_run == "yes" ]]; then
+        if [[ ${#new_atts[@]} -gt "0" ]]; then
+            increased_count=$((increased_count +1))
+            echo -e "$show_drive_info"
+            for i in "${new_atts[@]}"; do
+                echo -e "$i"
+            done
+        fi
+    fi
+done
+
+
+# Sort NVMe devices by DSM drive number and PCIe M.2 Card model
+for drive in "${nvmes[@]}"; do
+    get_nvme_num
+    drive_number="$(echo "$drive_num" | xargs)"
+
+    m2_card="$(synonvme --m2-card-model-get /dev/"$drive")"
+    if echo "$m2_card" | grep -q 'Not M.2 adapter card'; then
+        m2_card=""
+        nvmes_temp+=("${drive_number:?},${drive:?}")
+    else
+        nvmes_card_temp+=("${drive_number:?} (${m2_card}),${drive:?}")
+    fi
+done
+
+# Internal NVMe drives
+IFS=$'\n'
+nvmes_sorted=($(sort <<<"${nvmes_temp[*]}"))  # Sort array
+unset IFS
+
+# NVMe drives in PCIe M.2 cards
+IFS=$'\n'
+nvmes_card_sorted=($(sort <<<"${nvmes_card_temp[*]}"))  # Sort array
+unset IFS
+
+# Append nvmes_card_sorted to nvmes_sorted
+for d in "${nvmes_card_sorted[@]}"; do
+    nvmes_sorted+=("$d")
 done
 
 # NVMe drives
-for drive in "${nvmes[@]}"; do
-    # Empty array
+for d in "${nvmes_sorted[@]}"; do
+    # Get drive_num and drive from 'drive num,drive' in $d
+    drive_num="${d%%,*}  "  # Get contents of variable before comma
+    drive="${d#*,}"         # Get contents of variable after comma
+
+    # Empty the arrays
     changed_atts=()
+    new_atts=()
 
     # Show drive model and serial
-    get_nvme_num
+    #get_nvme_num  # Uncomment to hide PCIe M2 card model
     show_drive_model
 
     # Show SMART overall health if smartctl7 is installed
@@ -1128,11 +1361,25 @@ for drive in "${nvmes[@]}"; do
             fi
         fi
     fi
+
+    if [[ $first_run == "yes" ]]; then
+        if [[ ${#new_atts[@]} -gt "0" ]]; then
+            increased_count=$((increased_count +1))
+            echo -e "$show_drive_info"
+            for i in "${new_atts[@]}"; do
+                echo -e "$i"
+            done
+        fi
+    fi
 done
 
 if [[ $increased == "yes" ]]; then
     if [[ -z $increased_count ]]; then
         echo -e "\n${LiteGreen}No drives have increased important SMART attributes${Off}"
+        warn=""
+        errtotal="0"
+    elif [[ $first_run == "yes" ]]; then
+        echo -e "\nThe above drives have important SMART attributes greater than zero"
         warn=""
         errtotal="0"
     fi
