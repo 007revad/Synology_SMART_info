@@ -4,7 +4,7 @@
 ![Badge](https://hitscounter.dev/api/hit?url=https%3A%2F%2Fgithub.com%2F007revad%2FSynology_SMART_info&label=Visitors&icon=github&color=%23198754&message=&style=flat&tz=Australia%2FSydney)
 [![Donate](https://img.shields.io/badge/Donate-PayPal-green.svg)](https://www.paypal.com/paypalme/007revad)
 [![](https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86)](https://github.com/sponsors/007revad)
-[![committers.top badge](https://user-badge.committers.top/australia/007revad.svg)](https://user-badge.committers.top/australia/007revad)
+<!-- [![committers.top badge](https://user-badge.committers.top/australia/007revad.svg)](https://user-badge.committers.top/australia/007revad) -->
 <!-- [![committers.top badge](https://user-badge.committers.top/australia_public/007revad.svg)](https://user-badge.committers.top/australia_public/007revad) -->
 <!-- [![committers.top badge](https://user-badge.committers.top/australia_private/007revad.svg)](https://user-badge.committers.top/australia_private/007revad) -->
 <!-- [![Github Releases](https://img.shields.io/github/downloads/007revad/synology_smart_info/total.svg)](https://github.com/007revad/Synology_SMART_info/releases) -->
@@ -13,7 +13,7 @@
 
 Show Synology smart test progress or smart health and attributes.
 
-The script works in DSM 7, including DSM 7.2, and DSM 6.
+The script works in DSM 7, including DSM 7.2, DSM 7.3 and DSM 6.
 
 ## Download the script
 
@@ -55,6 +55,7 @@ There are optional flags you can use when running the script:
 ```YAML
   -a, --all             Show all SMART attributes
   -e, --email           Disable colored text in output scheduler emails
+  -i, --increased       Only show important attributes that have increased
   -h, --help            Show this help message
   -v, --version         Show the script version
 ```
@@ -85,6 +86,9 @@ If you have Seagate drives you should install SynoCommunity's [SynoCli Disk Tool
 
 <p align="center">SSD with reallocated sectors</p>
 <p align="center"><img src="/images/senna.png"></p>
+
+<p align="center">Run with --increased option</p>
+<p align="center"><img src="/images/increased.png"></p>
 
 <p align="center">HDD and SSD when run with --all option</p>
 <p align="center"><img src="/images/hdd_ssd_all.png"></p>
