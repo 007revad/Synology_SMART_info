@@ -1,3 +1,9 @@
+v1.4.29
+- Fixed System Drives in HD6500 showing as "Drive #". Now show as "System Drive #".
+- Now uses different text colors when run by Synosmartinfo package which uses a white background.
+- Bug fix for sorting drives when there are more than 9 drives. Now sorts correctly for upto 999 drives.
+- Improved sorting of expansion unit drives when there are more than 1 expansion units connected.
+
 v1.4.26
 - Added `-i, --increased` option to only show drives with important attributes that have changed since last time the script was run.
   - Useful for when the script is scheduled so you only get sent an email when important attributes have increased, or decreased.
