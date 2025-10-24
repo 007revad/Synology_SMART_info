@@ -24,7 +24,7 @@
 # https://github.com/Seagate/openSeaChest/wiki/Drive-Health-and-SMART
 #------------------------------------------------------------------------------
 
-scriptver="v1.4.29"
+scriptver="v1.4.30"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -754,17 +754,17 @@ show_health(){
             valA=""
             valB=""
             if echo "$e" | grep -E '^read:' >/dev/null; then
-                nameA="Total uncorrected read errors:      "
+                nameA="${Yellow}Total uncorrected read errors:      ${Off}"
                 valA=$(echo "$e" | awk '{printf $8}')
                 nameB="Total corrected read errors:        "
                 valB=$(echo "$e" | awk '{printf $5}')
             elif echo "$e" | grep -E '^write:' >/dev/null; then
-                nameA="Total uncorrected write errors:     "
+                nameA="${Yellow}Total uncorrected write errors:     ${Off}"
                 valA=$(echo "$e" | awk '{printf $8}')
                 nameB="Total corrected write errors:       "
                 valB=$(echo "$e" | awk '{printf $5}')
             elif echo "$e" | grep -E '^verify:' >/dev/null; then
-                nameA="Total uncorrected verify errors:    "
+                nameA="${Yellow}Total uncorrected verify errors:    ${Off}"
                 valA=$(echo "$e" | awk '{printf $8}')
                 nameB="Total corrected verify errors:      "
                 valB=$(echo "$e" | awk '{printf $5}')
