@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2317,SC2091
+# shellcheck disable=SC2317,SC2091,SC2076,SC2207
 #------------------------------------------------------------------------------
 # Show Synology smart test progress or smart health and attributes
 #
@@ -24,7 +24,7 @@
 # https://github.com/Seagate/openSeaChest/wiki/Drive-Health-and-SMART
 #------------------------------------------------------------------------------
 
-scriptver="v1.4.26"
+scriptver="v1.4.29"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -148,6 +148,16 @@ if [[ $color != "no" ]]; then
     #White='\e[0;37m'     # ${White}
     Error='\e[41m'        # ${Error}
     Off='\e[0m'           # ${Off}
+
+    # For Synomartinfo package's white background
+    if [[ $scriptpath =~ "/@appstore/Synosmartinfo/bin/syno_smart_info.sh" ]]; then
+        #Yellow='\e[0;93m'      # ${Yellow}
+        #Yellow='\e[1;33m'      # ${Yellow}
+        Yellow='\e[0;34m'      # ${Yellow}  # Purple
+        YellowPy='\033[0;34m'  # ${Yellow}  # Purple
+        #Cyan='\e[0;96m'        # ${Cyan}
+        Cyan='\e[1;36m'        # ${Cyan}
+    fi
 else
     echo ""  # For task scheduler email readability
 fi
@@ -233,7 +243,7 @@ get_drive_num(){
     # Get eunit model and port number
     if [[ $disk_cnridx -gt "0" ]]; then
         eunit_num="$disk_cnridx"
-        eunit_model=$(syno_slot_mapping "/dev/$drive" | grep "Eunit port $disk_cnridx" | awk '{print $NF}')
+        eunit_model=$(syno_slot_mapping | grep "Eunit port $disk_cnridx" | awk '{print $NF}')
         eunit="(${eunit_model}-$eunit_num)"
     fi
 
@@ -241,6 +251,9 @@ get_drive_num(){
         drive_num="USB Drive  "
     elif [[ $eunit ]]; then
         drive_num="Drive $disk_id $eunit  "
+    elif synodisk --enum -t sys | grep -q "/dev/$drive"; then
+        # HD6500
+        drive_num="System Drive $disk_id  "
     else
         drive_num="Drive $disk_id  "
     fi
@@ -343,7 +356,13 @@ def format_smart_line():
     if not line:
         return
     
-    YELLOW = '\033[0;33m'
+    script_path = '$scriptpath'
+    if re.search(r'/@appstore/Synosmartinfo/bin/syno_smart_info\.sh', script_path):
+        # For Synomartinfo package's white background
+        YELLOW = '$YellowPy'
+    else:
+        YELLOW = '\033[0;33m'
+    
     OFF = '\033[0m'
     COLOR_IDS = {5, 10, 187, 188, 196, 197, 198}
     
@@ -784,14 +803,18 @@ show_health(){
     if [[ $drive_type == "scsi" ]]; then  # SAS drive
         health=$("$smartctl" -H -d "$drive_type" -T permissive /dev/"$drive" | tail -n +5)
         if ! echo "$health" | grep -E 'SMART Health Status.*OK' >/dev/null; then
-            # Show all SMART attributes
-            health_bad="yes"
+            if [[ $increased != "yes" ]]; then
+                # Show all SMART attributes
+                health_bad="yes"
+            fi
         fi
     else  # SATA drive
         health=$("$smartctl" -H -d "$drive_type" -T permissive /dev/"$drive" | tail -n +5)
         if ! echo "$health" | grep PASSED >/dev/null; then
-            # Show all SMART attributes
-            health_bad="yes"
+            if [[ $increased != "yes" ]]; then
+                # Show all SMART attributes
+                health_bad="yes"
+            fi
         fi
     fi
 
@@ -1190,35 +1213,107 @@ for drive in "${drives[@]}"; do
     get_drive_num
     drive_number="$(echo "$drive_num" | xargs)"
 
-    if ! echo "$drive_number" | grep -q -E 'DX|RX|FX'; then
-        drives_temp+=("${drive_number:?},${drive:?}")
-    else
-        eunit_drives_temp+=("${drive_number:?},${drive:?}")
+    if [[ ${#drive_number} == "7" ]]; then
+        drives_1+=("${drive_number:?},${drive:?}")
+    elif [[ ${#drive_number} == "8" ]]; then
+        drives_2+=("${drive_number:?},${drive:?}")
+    elif [[ ${#drive_number} == "9" ]]; then
+        drives_3+=("${drive_number:?},${drive:?}")
+    elif echo "$drive_number" | grep -q -E '^System Drive'; then
+        sys_drives+=("${drive_number:?},${drive:?}")
+    elif echo "$drive_number" | grep -q -E '\(DX|\(RX|\(FX'; then
+        d_number="$(echo "$drive_num" | cut -d"(" -f1 | xargs)"
+        if [[ ${#d_number} == "7" ]]; then
+            eunit_drives_1+=("${drive_number:?},${drive:?}")
+        elif [[ ${#d_number} == "8" ]]; then
+            eunit_drives_2+=("${drive_number:?},${drive:?}")
+        elif [[ ${#d_number} == "9" ]]; then
+            eunit_drives_3+=("${drive_number:?},${drive:?}")
+        fi
     fi
 done
 
-# Internal HDD/SSD drives
+# Sort HDD/SSD drives_1 array
 IFS=$'\n'
-drives_sorted=($(sort <<<"${drives_temp[*]}"))  # Sort array
+drives_sorted=($(sort <<<"${drives_1[*]}"))  # Sort array
 unset IFS
 
-# HDD/SSD drives in eunits
+# Sort HDD/SSD drives_2 array
 IFS=$'\n'
-eunit_drives_sorted=($(sort <<<"${eunit_drives_temp[*]}"))  # Sort array
+drives_sorted_2=($(sort <<<"${drives_2[*]}"))  # Sort array
 unset IFS
 
-# HDD/SSD drives in eunits part 2
-IFS=$'\n'
-eunits_drives_sorted=($(sort -t"-" -k2,2 <<<"${eunit_drives_sorted[*]}"))  # Sort array
-unset IFS
-
-# Append eunit_drives_sorted to drives_sorted
-for d in "${eunits_drives_sorted[@]}"; do
+# Append drives_sorted_2 to drives_sorted
+for d in "${drives_sorted_2[@]}"; do
     drives_sorted+=("$d")
 done
 
+# Sort HDD/SSD drives_3 array
+IFS=$'\n'
+drives_sorted_3=($(sort <<<"${drives_3[*]}"))  # Sort array
+unset IFS
+
+# Append drives_sorted_3 to drives_sorted
+for d in "${drives_sorted_3[@]}"; do
+    drives_sorted+=("$d")
+done
+
+
+# Sort HDD/SSD sys_drives array
+IFS=$'\n'
+sys_drives_sorted=($(sort <<<"${sys_drives[*]}"))  # Sort array
+unset IFS
+
+# Append sys_drives_sorted to drives_sorted
+for d in "${sys_drives_sorted[@]}"; do
+    drives_sorted+=("$d")
+done
+
+
+# Get array of connected expansion units
+readarray -t eunits_temp< <(syno_slot_mapping | grep 'Eunit')
+for e in "${eunits_temp[@]}"; do
+    eunit_model="$(echo "$e" | awk '{print $NF}')"
+    eunit_port="$(echo "$e" | awk '{print $3}')"
+    eunits+=("${eunit_model}-${eunit_port}")
+done
+
+# Sort eunit HDD/SSD eunit_drives_1 array
+IFS=$'\n'
+eunit_drives_sorted=($(sort <<<"${eunit_drives_1[*]}"))  # Sort array
+unset IFS
+
+# Sort eunit HDD/SSD eunit_drives_2 array
+IFS=$'\n'
+eunit_drives_sorted_2=($(sort <<<"${eunit_drives_2[*]}"))  # Sort array
+unset IFS
+
+# Append eunit_drives_sorted_2 to eunit_drives_sorted
+for d in "${eunit_drives_sorted_2[@]}"; do
+    eunit_drives_sorted+=("$d")
+done
+
+# Sort eunit HDD/SSD eunit_drives_3 array
+IFS=$'\n'
+eunit_drives_sorted_3=($(sort <<<"${eunit_drives_3[*]}"))  # Sort array
+unset IFS
+
+# Append eunit_drives_sorted_3 to eunit_drives_sorted
+for d in "${eunit_drives_sorted_3[@]}"; do
+    eunit_drives_sorted+=("$d")
+done
+
+# Append eunit drives to drives_sorted in eunit order then drive number order
+for e in "${eunits[@]}"; do
+    for d in "${eunit_drives_sorted[@]}"; do
+        if echo "$d" | grep -q "$e"; then
+            drives_sorted+=("$d")
+        fi
+    done
+done
+
+
 # HDD and SSD
-#for drive in "${drives[@]}"; do
 for d in "${drives_sorted[@]}"; do
     # Get drive from 'drive num,drive' in $d
     drive="${d#*,}"
