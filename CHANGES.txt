@@ -1,3 +1,9 @@
+v1.4.30
+- Added highlighting for important smart attributes for SAS drives:
+  - Total uncorrected read errors
+  - Total uncorrected write errors
+  - Total uncorrected verify errors
+
 v1.4.29
 - Fixed System Drives in HD6500 showing as "Drive #". Now show as "System Drive #".
 - Now uses different text colors when run by Synosmartinfo package which uses a white background.
