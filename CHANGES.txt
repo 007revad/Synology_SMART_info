@@ -1,8 +1,9 @@
-v1.4.30
+v1.4.31
 - Added highlighting for important smart attributes for SAS drives:
   - Total uncorrected read errors
   - Total uncorrected write errors
   - Total uncorrected verify errors
+- Changed to use different method of getting expansion unit model to be backward compatible with NAS models without syno_slot_mapping.
 
 v1.4.29
 - Fixed System Drives in HD6500 showing as "Drive #". Now show as "System Drive #".
