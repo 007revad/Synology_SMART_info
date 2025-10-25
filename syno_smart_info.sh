@@ -22,9 +22,12 @@
 # https://www.disktuna.com/seagate-raw-smart-attributes-to-error-convertertest/#102465319
 #
 # https://github.com/Seagate/openSeaChest/wiki/Drive-Health-and-SMART
+#
+# S.M.A.R.T. attribute list (ATA ans SCSI)
+# https://www.hdsentinel.com/smart/smartattr.php
 #------------------------------------------------------------------------------
 
-scriptver="v1.4.30"
+scriptver="v1.4.31"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -231,26 +234,30 @@ get_drive_num(){
     drive_num=""
     disk_id=""
     disk_cnr=""
-    disk_cnridx=""
-    eunit_num=""
-    eunit_model=""
+    #disk_cnridx=""
+    #eunit_num=""
+    #eunit_model=""
     eunit=""
     # Get Drive number
     disk_id=$(synodisk --get_location_form "/dev/$drive" | grep 'Disk id:' | awk '{print $NF}')
     disk_cnr=$(synodisk --get_location_form "/dev/$drive" | grep 'Disk cnr:' | awk '{print $NF}')
-    disk_cnridx=$(synodisk --get_location_form "/dev/$drive" | grep 'Disk cnridx:' | awk '{print $NF}')
+    #disk_cnridx=$(synodisk --get_location_form "/dev/$drive" | grep 'Disk cnridx:' | awk '{print $NF}')
 
     # Get eunit model and port number
-    if [[ $disk_cnridx -gt "0" ]]; then
-        eunit_num="$disk_cnridx"
-        eunit_model=$(syno_slot_mapping | grep "Eunit port $disk_cnridx" | awk '{print $NF}')
-        eunit="(${eunit_model}-$eunit_num)"
-    fi
+    # Only device tree models have syno_slot_mapping so we use different method
+    # /tmp/eunitinfo_2 example contents:
+    #  EUnitModel=DX213-2
+    #  EUnitDisks=/dev/sdja,/dev/sdjb
+    for f in /tmp/eunitinfo_*; do
+        if grep -q "/dev/$drive" "$f"; then
+            eunit="$(get_key_value "$f" EUnitModel)"
+        fi
+    done
 
     if [[ $disk_cnr -eq "4" ]]; then
         drive_num="USB Drive  "
     elif [[ $eunit ]]; then
-        drive_num="Drive $disk_id $eunit  "
+        drive_num="Drive $disk_id ($eunit)  "
     elif synodisk --enum -t sys | grep -q "/dev/$drive"; then
         # HD6500
         drive_num="System Drive $disk_id  "
@@ -1271,11 +1278,9 @@ done
 
 
 # Get array of connected expansion units
-readarray -t eunits_temp< <(syno_slot_mapping | grep 'Eunit')
-for e in "${eunits_temp[@]}"; do
-    eunit_model="$(echo "$e" | awk '{print $NF}')"
-    eunit_port="$(echo "$e" | awk '{print $3}')"
-    eunits+=("${eunit_model}-${eunit_port}")
+# Only device tree models have syno_slot_mapping so we use different method
+for f in /tmp/eunitinfo_*; do
+    eunits+=("$(get_key_value "$f" EUnitModel)")
 done
 
 # Sort eunit HDD/SSD eunit_drives_1 array
