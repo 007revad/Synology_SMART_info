@@ -1,3 +1,6 @@
+v1.4.32
+- Bug fix for `grep: /tmp/eunitinfo_*: No such file or directory` when no expansion unit connected.
+
 v1.4.31
 - Added highlighting for important smart attributes for SAS drives:
   - Total uncorrected read errors
