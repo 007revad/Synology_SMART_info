@@ -27,7 +27,7 @@
 # https://www.hdsentinel.com/smart/smartattr.php
 #------------------------------------------------------------------------------
 
-scriptver="v1.4.31"
+scriptver="v1.4.32"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -249,8 +249,10 @@ get_drive_num(){
     #  EUnitModel=DX213-2
     #  EUnitDisks=/dev/sdja,/dev/sdjb
     for f in /tmp/eunitinfo_*; do
-        if grep -q "/dev/$drive" "$f"; then
-            eunit="$(get_key_value "$f" EUnitModel)"
+        if [[ -f "$f" ]]; then
+            if grep -q "/dev/$drive" "$f"; then
+                eunit="$(get_key_value "$f" EUnitModel)"
+            fi
         fi
     done
 
@@ -1280,7 +1282,9 @@ done
 # Get array of connected expansion units
 # Only device tree models have syno_slot_mapping so we use different method
 for f in /tmp/eunitinfo_*; do
-    eunits+=("$(get_key_value "$f" EUnitModel)")
+    if [[ -f "$f" ]]; then
+        eunits+=("$(get_key_value "$f" EUnitModel)")
+    fi
 done
 
 # Sort eunit HDD/SSD eunit_drives_1 array
