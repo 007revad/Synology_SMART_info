@@ -213,14 +213,13 @@ tag=$(echo "$release" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 
 if ! printf "%s\n%s\n" "$tag" "$scriptver" |
         sort --check=quiet --version-sort >/dev/null ; then
-    if [[ $update != "yes" ]]; then
-        echo -e "\n${Cyan}There is a newer version of this script available.${Off}"
-        echo -e "Current version: ${scriptver}\nLatest version:  $tag"
-        echo -e "Run ${Cyan}syno_smart_info.sh -u${Off} to update."
-    else
+    echo -e "\n${Cyan}There is a newer version of this script available.${Off}"
+    echo -e "Current version: ${scriptver}\nLatest version:  $tag"
+
+    if [[ $update == "yes" ]]; then
         if [[ -f "${logpath}/updateLocalScript.sh" ]]; then
-            if bash "${logpath}/updateLocalScript.sh"; then
-                echo -e "Syno_smart_info.sh updated"
+            if bash "${logpath}/updateLocalScript.sh" "${logpath}"; then
+                echo -e "syno_smart_info.sh updated"
                 exit
             else
                 echo -e "Failed to update syno_smart_info.sh!"
@@ -230,8 +229,14 @@ if ! printf "%s\n%s\n" "$tag" "$scriptver" |
             echo -e "Missing file: ${logpath}/updateLocalScript.sh"
             exit 1
         fi
+    elif [[ -f "${logpath}/updateLocalScript.sh" ]]; then
+        # Skip if running from Synomartinfo package folder
+        if [[ ! $scriptpath =~ "/@appstore/Synosmartinfo/bin/syno_smart_info.sh" ]]; then
+            echo -e "Run ${Cyan}syno_smart_info.sh -u${Off} to update."
+        fi
     fi
 fi
+
 
 #------------------------------------------------------------------------------
 
