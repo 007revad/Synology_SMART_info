@@ -1,3 +1,8 @@
+v1.4.33
+- Added updateLocalScript.sh to update the script if there's a newer version. Thanks @framps
+- Added `-u, --update` option to update to update the script if there's a newer version.
+- Changed info displayed when there's a new version available to: 
+
 v1.4.32
 - Bug fix for `grep: /tmp/eunitinfo_*: No such file or directory` when no expansion unit connected.
 
