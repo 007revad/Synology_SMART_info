@@ -27,7 +27,7 @@
 # https://www.hdsentinel.com/smart/smartattr.php
 #------------------------------------------------------------------------------
 
-scriptver="v1.4.32"
+scriptver="v1.4.33"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -77,6 +77,7 @@ Options:
   -a, --all             Show all SMART attributes
   -e, --email           Disable colored text in output scheduler emails
   -i, --increased       Only show important attributes that have increased
+  -u, --update          Update the script to the latest version
   -h, --help            Show this help message
   -v, --version         Show the script version
 
@@ -98,7 +99,7 @@ args=("$@")
 
 # Check for flags with getopt
 if options="$(getopt -o abcdefghijklmnopqrstuvwxyz0123456789 -l \
-    all,email,increased,help,version,debug \
+    all,email,increased,update,help,version,debug \
     -- "$@")"; then
     eval set -- "$options"
     while true; do
@@ -111,6 +112,9 @@ if options="$(getopt -o abcdefghijklmnopqrstuvwxyz0123456789 -l \
                 ;;
             -i|--increased)     # Only display increased attributes
                 increased=yes
+                ;;
+            -u|--update)        # Update the script to the latest version
+                update=yes
                 ;;
             -h|--help)          # Show usage options
                 usage
@@ -209,8 +213,24 @@ tag=$(echo "$release" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 
 if ! printf "%s\n%s\n" "$tag" "$scriptver" |
         sort --check=quiet --version-sort >/dev/null ; then
-    echo -e "\n${Cyan}There is a newer version of this script available.${Off}"
-    echo -e "Current version: ${scriptver}\nLatest version:  $tag"
+    if [[ $update != "yes" ]]; then
+        echo -e "\n${Cyan}There is a newer version of this script available.${Off}"
+        echo -e "Current version: ${scriptver}\nLatest version:  $tag"
+        echo -e "Run ${Cyan}syno_smart_info.sh -u${Off} to update."
+    else
+        if [[ -f "${logpath}/updateLocalScript.sh" ]]; then
+            if bash "${logpath}/updateLocalScript.sh"; then
+                echo -e "Syno_smart_info.sh updated"
+                exit
+            else
+                echo -e "Failed to update syno_smart_info.sh!"
+                exit 1
+            fi
+        else
+            echo -e "Missing file: ${logpath}/updateLocalScript.sh"
+            exit 1
+        fi
+    fi
 fi
 
 #------------------------------------------------------------------------------

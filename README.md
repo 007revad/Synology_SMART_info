@@ -56,6 +56,7 @@ There are optional flags you can use when running the script:
   -a, --all             Show all SMART attributes
   -e, --email           Disable colored text in output scheduler emails
   -i, --increased       Only show important attributes that have increased
+  -u, --update          Update the script to the latest version
   -h, --help            Show this help message
   -v, --version         Show the script version
 ```
