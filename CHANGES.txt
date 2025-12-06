@@ -1,5 +1,5 @@
 v1.4.34
-- Added decoding of Seagate and Synology HAT3300 HDD SMART raw attribute 140 Flying_Head_Hours.
+- Added decoding of Seagate and Synology HAT3300 HDD SMART raw attribute 240 Flying_Head_Hours.
 - Added decoding of Seagate and Synology HAT3300 HDD SMART raw attributes 1, 7, 195 and 240 when DSM only has smartctl 6.5.
 - Updated to still work in future for smartmontools versions greater than 7.x.
 
