@@ -17,6 +17,9 @@ The script works in DSM 7, including DSM 7.2, DSM 7.3 and DSM 6.
 
 In DSM 7.2.1 Synology removed the ability to view S.M.A.R.T. attributes in Storage Manager.
 
+**UPDATE** 
+- v1.4.34 and later now decodes Seagate HDD and Synology HAT3300 HDD SMART values for attributes 1, 7, 195 and 240 with smartctl 6 or smartctl 7.
+
 ## Download the script
 
 1. Download the latest version _Source code (zip)_ from https://github.com/007revad/Synology_SMART_info/releases
@@ -62,16 +65,6 @@ There are optional flags you can use when running the script:
   -h, --help            Show this help message
   -v, --version         Show the script version
 ```
-
-## Optional for Seagate drives
-
-If you have Seagate drives you should install SynoCommunity's [SynoCli Disk Tools v4.0-13 or later](https://synocommunity.com/package/synocli-disk) package so this script can decode the values of Seagate's SMART attributes 1, 7 and 195. SynoCli Disk Tools v4.0-13 includes smartmontools v7.4
-
-<p align="center">Seagate HDD with DSM's smartctl 6.5</p>
-<p align="center"><img src="/images/seagate_smartctl_65.png"></p>
-
-<p align="center">Seagate HDD with SynoCommunity's smartctl 7.4</p>
-<p align="center"><img src="/images/seagate_smartctl_7.png"></p>
 
 ## Screenshots
 
