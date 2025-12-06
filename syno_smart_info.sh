@@ -25,9 +25,16 @@
 #
 # S.M.A.R.T. attribute list (ATA ans SCSI)
 # https://www.hdsentinel.com/smart/smartattr.php
+#
+# https://linux.die.net/man/8/smartctl
 #------------------------------------------------------------------------------
 
-scriptver="v1.4.33"
+# Attribute ID: 191
+# Attribute Name: G-sense error rate
+# Description: This value tracks errors resulting from external shock or vibration.
+# Other names: G-Sense Error Rate, Shock Sense 
+
+scriptver="v1.4.34"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -555,11 +562,22 @@ smart_all(){
     # SAT / non-SCSI path
     print_smart_header
 
-    if [[ $seagate == "yes" ]] && [[ $smartversion == 7 ]]; then
+    if [[ $seagate == "yes" ]] && [[ $smartversion -gt "6" ]]; then
         # Get all attributes, skip built-in header (first 6 lines), then drop “ID#” header
         readarray -t att_array < <(
             "$smartctl" -A -f brief -d "$drive_type" -T permissive \
-                -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 "/dev/$drive" \
+                -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 \
+                -v 240,msec24hour32 "/dev/$drive" \
+            | tail -n +7 \
+            | grep -v '^ID#'
+        )
+    elif [[ $seagate == "yes" ]] && [[ $smartversion -lt "7" ]]; then
+        # Get all attributes, skip built-in header (first 6 lines), then drop “ID#” header
+        readarray -t att_array < <(
+            "$smartctl" -A -f brief -d "$drive_type" -T permissive \
+                -v 1,raw48:54,Raw_Read_Error_Rate -v 7,raw48:54,Seek_Error_Rate \
+                -v 195,raw48:54,Hardware_ECC_Recovered \
+                -v 240,msec24hour32,Head_Flying_Hours "/dev/$drive" \
             | tail -n +7 \
             | grep -v '^ID#'
         )
@@ -857,7 +875,7 @@ show_health(){
         smart_all
     else
         # Show only important SMART attributes
-        if [[ $seagate == "yes" ]] && [[ $smartversion == 7 ]]; then
+        if [[ $seagate == "yes" ]] && [[ $smartversion -gt "6" ]]; then
             readarray -t smart_atts < <("$smartctl" -A -d "$drive_type" -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 /dev/"$drive")
         else
             readarray -t smart_atts < <("$smartctl" -A -d "$drive_type" /dev/"$drive")
@@ -887,7 +905,7 @@ show_health(){
                 if [[ ${strIn:0:3} == "  1" ]]; then
                     # 1 Raw read error rate
                     if [[ $seagate == "yes" ]]; then
-                        if [[ $smartversion == 7 ]]; then
+                        if [[ $smartversion -gt "6" ]]; then
                             short_attibutes "  1" zero
                         else
                             short_attibutes "  1" none
@@ -901,7 +919,7 @@ show_health(){
                 elif [[ ${strIn:0:3} == "  7" ]]; then
                     # 7 Seek_Error_Rate
                     if [[ $seagate == "yes" ]]; then
-                        if [[ $smartversion == 7 ]]; then
+                        if [[ $smartversion -gt "6" ]]; then
                             short_attibutes "  7" zero
                         else
                             short_attibutes "  7" none
@@ -930,7 +948,7 @@ show_health(){
                 elif [[ ${strIn:0:3} == "195" ]]; then
                     # 195 Hardware_ECC_Recovered aka ECC_On_the_Fly_Count
                     if [[ $seagate == "yes" ]]; then
-                        if [[ $smartversion == 7 ]]; then
+                        if [[ $smartversion -gt "6" ]]; then
                             short_attibutes "195" zero
                         else
                             short_attibutes "195" none
