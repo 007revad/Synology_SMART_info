@@ -15,6 +15,8 @@ Show Synology smart test progress or smart health and attributes.
 
 The script works in DSM 7, including DSM 7.2, DSM 7.3 and DSM 6.
 
+In DSM 7.2.1 Synology removed the ability to view S.M.A.R.T. attributes in Storage Manager.
+
 ## Download the script
 
 1. Download the latest version _Source code (zip)_ from https://github.com/007revad/Synology_SMART_info/releases
