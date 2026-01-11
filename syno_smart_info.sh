@@ -34,7 +34,7 @@
 # Description: This value tracks errors resulting from external shock or vibration.
 # Other names: G-Sense Error Rate, Shock Sense 
 
-scriptver="v1.4.34"
+scriptver="v1.4.35"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -876,9 +876,13 @@ show_health(){
     else
         # Show only important SMART attributes
         if [[ $seagate == "yes" ]] && [[ $smartversion -gt "6" ]]; then
-            readarray -t smart_atts < <("$smartctl" -A -d "$drive_type" -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 /dev/"$drive")
+            readarray -t smart_atts < <("$smartctl" -A -d "$drive_type" \
+            -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 /dev/"$drive")
         else
-            readarray -t smart_atts < <("$smartctl" -A -d "$drive_type" /dev/"$drive")
+            #readarray -t smart_atts < <("$smartctl" -A -d "$drive_type" /dev/"$drive")
+            readarray -t smart_atts < <("$smartctl" -A -d "$drive_type" \
+            -v 1,raw48:54,Raw_Read_Error_Rate -v 7,raw48:54,Seek_Error_Rate \
+            -v 195,raw48:54,Hardware_ECC_Recovered /dev/"$drive")
         fi
         # Decide if show airflow temperature
         if echo "${smart_atts[*]}" | grep -c -E '194.*Temp' >/dev/null; then
