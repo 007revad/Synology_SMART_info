@@ -34,7 +34,7 @@
 # Description: This value tracks errors resulting from external shock or vibration.
 # Other names: G-Sense Error Rate, Shock Sense 
 
-scriptver="v1.4.35"
+scriptver="v1.4.36"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -878,11 +878,12 @@ show_health(){
         if [[ $seagate == "yes" ]] && [[ $smartversion -gt "6" ]]; then
             readarray -t smart_atts < <("$smartctl" -A -d "$drive_type" \
             -v 1,raw48:54 -v 7,raw48:54 -v 195,raw48:54 /dev/"$drive")
-        else
-            #readarray -t smart_atts < <("$smartctl" -A -d "$drive_type" /dev/"$drive")
+        elif [[ $seagate == "yes" ]] && [[ $smartversion -lt "7" ]]; then
             readarray -t smart_atts < <("$smartctl" -A -d "$drive_type" \
             -v 1,raw48:54,Raw_Read_Error_Rate -v 7,raw48:54,Seek_Error_Rate \
             -v 195,raw48:54,Hardware_ECC_Recovered /dev/"$drive")
+        else
+            readarray -t smart_atts < <("$smartctl" -A -d "$drive_type" /dev/"$drive")
         fi
         # Decide if show airflow temperature
         if echo "${smart_atts[*]}" | grep -c -E '194.*Temp' >/dev/null; then
@@ -908,29 +909,29 @@ show_health(){
             else  # SATA drive
                 if [[ ${strIn:0:3} == "  1" ]]; then
                     # 1 Raw read error rate
-                    if [[ $seagate == "yes" ]]; then
-                        if [[ $smartversion -gt "6" ]]; then
-                            short_attibutes "  1" zero
-                        else
-                            short_attibutes "  1" none
-                        fi
-                    else
+                    #if [[ $seagate == "yes" ]]; then
+                    #    if [[ $smartversion -gt "6" ]]; then
+                    #        short_attibutes "  1" zero
+                    #    else
+                    #        short_attibutes "  1" none
+                    #    fi
+                    #else
                         short_attibutes "  1" zero
-                    fi
+                    #fi
                 elif [[ ${strIn:0:3} == "  5" ]]; then
                     # 5 Reallocated sectors - scrutiny and BackBlaze
                     short_attibutes "  5" zero
                 elif [[ ${strIn:0:3} == "  7" ]]; then
                     # 7 Seek_Error_Rate
-                    if [[ $seagate == "yes" ]]; then
-                        if [[ $smartversion -gt "6" ]]; then
-                            short_attibutes "  7" zero
-                        else
-                            short_attibutes "  7" none
-                        fi
-                    else
+                    #if [[ $seagate == "yes" ]]; then
+                    #    if [[ $smartversion -gt "6" ]]; then
+                    #        short_attibutes "  7" zero
+                    #    else
+                    #        short_attibutes "  7" none
+                    #    fi
+                    #else
                         short_attibutes "  7" zero
-                    fi
+                    #fi
                 elif [[ ${strIn:0:3} == "  9" ]]; then
                     # 9 Power on hours
                     short_attibutes "  9" none
@@ -951,15 +952,15 @@ show_health(){
                     short_attibutes "194" none
                 elif [[ ${strIn:0:3} == "195" ]]; then
                     # 195 Hardware_ECC_Recovered aka ECC_On_the_Fly_Count
-                    if [[ $seagate == "yes" ]]; then
-                        if [[ $smartversion -gt "6" ]]; then
-                            short_attibutes "195" zero
-                        else
-                            short_attibutes "195" none
-                        fi
-                    else
+                    #if [[ $seagate == "yes" ]]; then
+                    #    if [[ $smartversion -gt "6" ]]; then
+                    #        short_attibutes "195" zero
+                    #    else
+                    #        short_attibutes "195" none
+                    #    fi
+                    #else
                         short_attibutes "195" zero
-                    fi
+                    #fi
                 elif [[ ${strIn:0:3} == "197" ]]; then
                     # 197 Current pending sectors - scrutiny and BackBlaze
                     short_attibutes "197" zero
@@ -972,6 +973,9 @@ show_health(){
                 elif [[ ${strIn:0:3} == "200" ]]; then
                     # 200 Multi_Zone_Error_Rate - WD
                     short_attibutes "200" zero
+                elif [[ ${strIn:0:3} == "252" ]]; then
+                    # 252 Added_Bad_Flash_Blk_Ct - Samsung SSD
+                    short_attibutes "252" zero
                 fi
             fi
         done
