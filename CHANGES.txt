@@ -1,6 +1,6 @@
 v1.4.36
-- Added logging of SMART attribute "252 Added_Bad_Flash_Blk_Ct" for Samsung SSDs when -i or --increased option used.
-- Added logging of SMART attributes 1, 7 and 195 for Seagate drives when using smartctl 6.5 when -i or --increased option used.
+- Added logging of SMART attribute "252 Added_Bad_Flash_Blk_Ct" for Samsung SSDs for when -i or --increased option used.
+- Added logging of SMART attributes 1, 7 and 195 for Seagate drives when using smartctl 6.5 for when -i or --increased option used.
 - Bug fix for using raw48 for all non-Seagate drives is smartctl is v6.5.
 
 v1.4.35
