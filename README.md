@@ -19,6 +19,7 @@ In DSM 7.2.1 Synology removed the ability to view S.M.A.R.T. attributes in Stora
 
 > **UPDATE** 
 > v1.4.34 and later now decodes Seagate HDD and Synology HAT3300 HDD SMART values for attributes 1, 7, 195 and 240 with smartctl 6 or smartctl 7.
+> v1.4.37 and later now also decodes Seagate HDD and Synology HAT3300 HDD the SMART value for attributes 188 with smartctl 6 or smartctl 7.
 
 ## Download the script
 
