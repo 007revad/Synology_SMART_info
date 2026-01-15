@@ -1,3 +1,6 @@
+v1.4.37
+- Added decoding of Seagate and Synology HAT3300 HDD SMART raw attribute 188 Command_Timeout_Count. Issue #62
+
 v1.4.36
 - Added logging of SMART attribute "252 Added_Bad_Flash_Blk_Ct" for Samsung SSDs for when -i or --increased option used.
 - Added logging of SMART attributes 1, 7 and 195 for Seagate drives when using smartctl 6.5 for when -i or --increased option used.
