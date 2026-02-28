@@ -1,3 +1,7 @@
+v1.4.39
+- Added support for showing when SMART_Error_Counter_Log has increased when the `-i` or `--increased` option is used.
+- Bug fix for caculating the size of "Total Bytes Written" and "Total Bytes Read" when using smartctl 6.5. Issue #65
+
 v1.4.38
 - Bug fix for getting NVMe error log quantity. Issue #64
 
