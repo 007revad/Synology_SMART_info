@@ -34,7 +34,7 @@
 # Description: This value tracks errors resulting from external shock or vibration.
 # Other names: G-Sense Error Rate, Shock Sense 
 
-scriptver="v1.4.38"
+scriptver="v1.4.39"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -562,6 +562,11 @@ smart_all(){
     # SAT / non-SCSI path
     print_smart_header
 
+    # https://www.virten.net/2016/12/ssd-total-bytes-written-calculator/
+    # (Total_LBAs_Written x Sector Size) = Total Bytes Written
+    # (Total_LBAs_Read x Sector Size) = Total Bytes Read
+    sector_size="$(cat "/sys/block/$drive/queue/logical_block_size")"
+
     if [[ $seagate == "yes" ]] && [[ $smartversion -gt "6" ]]; then
         # Get all attributes, skip built-in header (first 6 lines), then drop “ID#” header
         readarray -t att_array < <(
@@ -604,6 +609,7 @@ log_bad(){
     # $1 is "197 Current_Pending_Sector  0x0032   200   200   000    Old_age   Always       -       52"
     # $1 for SAS is "Elements in grown defect list: 0"
     local var1
+    local var1_trimmed
     local var2
     if [[ $drive_type == "scsi" ]]; then  # SAS drive
         # Get attribute name
@@ -612,6 +618,9 @@ log_bad(){
         # Get attribute value
         #var2=$(echo "$strIn" | awk -F':' '{printf $2}' | xargs)
         var2=$(echo "$1" | awk -F':' '{printf $2}' | xargs)
+    elif [[ $1 == "SMART_Error_Counter_Log" ]]; then
+        var1="$1"
+        var2="$2"
     else
         # Get attribute name
         #var1=$(echo "$1" | awk '{printf "%-28s", $2}')
@@ -619,7 +628,6 @@ log_bad(){
         # Get attribute value
         var2=$(echo "$1" | awk '{printf $10}' | awk -F"+" '{print $1}' | cut -d"h" -f1)
     fi
-
     var1_trimmed="$(echo "$var1" | xargs)"
     show_increased=""
     previous_att="$(get_section_key_value "$smart_log" "$serial" "$var1_trimmed")"
@@ -644,23 +652,25 @@ log_bad(){
 }
 
 log_bad_nvme(){ 
-    # $var2 is smart attribute value
-    # $var3 is smart attribute name
-
-    var3_trimmed="$(echo "$var3" | xargs)"
+    # $1 is smart attribute name
+    # $2 is smart attribute value
+    local var1_trimmed
+    local var2
+    var1_trimmed="$(echo "$1" | xargs)"
+    var2="$2"
     show_increased=""
-    previous_att="$(get_section_key_value "$smart_log" "$serial" "$var3_trimmed")"
+    previous_att="$(get_section_key_value "$smart_log" "$serial" "$var1_trimmed")"
     if [[ -z $previous_att ]]; then
         # Create ini section if missing
         if ! grep "$serial" "$smart_log" > /dev/null; then
             echo -e "[${serial}]\ndrive_num=" >> "$smart_log"
         fi
-        set_section_key_value "$smart_log" "$serial" "$var3_trimmed" "$var2"
+        set_section_key_value "$smart_log" "$serial" "$var1_trimmed" "$var2"
     elif [[ $var2 -gt "$previous_att" ]]; then
-        set_section_key_value "$smart_log" "$serial" "$var3_trimmed" "$var2"
+        set_section_key_value "$smart_log" "$serial" "$var1_trimmed" "$var2"
         show_increased=$'\\t'"Increased by $((var2 - previous_att))"
     elif [[ $var2 -lt "$previous_att" ]]; then
-        set_section_key_value "$smart_log" "$serial" "$var3_trimmed" "$var2"
+        set_section_key_value "$smart_log" "$serial" "$var1_trimmed" "$var2"
         show_increased=$'\\t'"Decreased by $((previous_att - var2))"
     fi
 
@@ -724,6 +734,16 @@ short_attibutes(){
         # Log important attributes with 0 raw value
         if [[ $2 == "zero" && $var2 -eq "0" ]]; then
             log_bad "$strIn"
+            # Add to changed_atts if value decreased to 0 (show_increased set by log_bad)
+            if [[ -n $show_increased ]]; then
+                if [[ $increased == "yes" ]]; then
+                    if [[ $first_run == "yes" ]]; then
+                        new_atts+=("$num${Yellow}$var1${Off} $var2")
+                    else
+                        changed_atts+=("$num${Yellow}$var1${Off} $var2$show_increased")
+                    fi
+                fi
+            fi
         fi
     fi
 }
@@ -790,12 +810,27 @@ show_health(){
             fi
         elif [[ $errcount -gt "0" ]]; then
             errtotal=$((errtotal +errcount))
+            log_bad "SMART_Error_Counter_Log" "$errcount"
             if [[ $increased != "yes" ]]; then
                 echo -e "SMART Error Counter Log:         ${LiteRed}$errcount${Off}"
+            elif [[ -n $show_increased ]]; then
+                if [[ $first_run == "yes" ]]; then
+                    new_atts+=(" ${Yellow}SMART_Error_Counter_Log${Off} ${LiteRed}$errcount${Off}")
+                else
+                    changed_atts+=("${Yellow}SMART_Error_Counter_Log${Off} ${LiteRed}$errcount${Off}$show_increased")
+                fi
             fi
         else
+            log_bad "SMART_Error_Counter_Log" "0"
+            errcount="0"
             if [[ $increased != "yes" ]]; then
                 echo -e "SMART Error Counter Log:         ${LiteGreen}No Errors Logged${Off}"
+            elif [[ -n $show_increased ]]; then
+                if [[ $first_run == "yes" ]]; then
+                    new_atts+=(" ${Yellow}SMART_Error_Counter_Log${Off} $errcount")
+                else
+                    changed_atts+=("${Yellow}SMART_Error_Counter_Log${Off} $errcount$show_increased")
+                fi
             fi
         fi
     else
@@ -870,6 +905,11 @@ show_health(){
             fi
         fi
     fi
+
+    # https://www.virten.net/2016/12/ssd-total-bytes-written-calculator/
+    # (Total_LBAs_Written x Sector Size) = Total Bytes Written
+    # (Total_LBAs_Read x Sector Size) = Total Bytes Read
+    sector_size="$(cat "/sys/block/$drive/queue/logical_block_size")"
 
     if [[ $health_bad == "yes" ]] || [[ $all == "yes" ]]; then
         # Show all SMART attributes if health-bad == yes, or -a/--all option used
@@ -1001,20 +1041,44 @@ show_health(){
 
 smart_nvme(){ 
     # $1 is log type: error-log, smart-log, smart-log-add or self-test-log
-    # $drive is nvme0 etc
+    # $drive is nvme0n1 etc
+
+
+    # (data_units_written x (Sector Size x 1000)) = Total Bytes Written
+    # (data_units_read x (Sector Size x 1000)) = Total Bytes Read
+    sector_size="$(cat "/sys/block/$drive/queue/logical_block_size")"
+
 
     if [[ $1 == "error-log" ]]; then
         # Retrieve Error Log and show error count
+        #errlog="$(nvme error-log "/dev/$drive" | grep error_count | uniq)"
         errlog="$(nvme error-log "/dev/$drive" | grep error_count | head -1)"
         errcount="$(echo "$errlog" | awk '{print $3}')"
+
+        if [[ $errcount =~ ^[0-9]+$ ]]; then
+            log_bad_nvme "SMART_Error_Counter_Log" "$errcount"
+        fi
+
         if [[ $errcount -gt "0" ]]; then
             errtotal=$((errtotal +errcount))
             if [[ $increased != "yes" ]]; then
                 echo -e "SMART Error Counter Log:         ${LiteRed}$errcount${Off}"
+            elif [[ -n $show_increased ]]; then
+                if [[ $first_run == "yes" ]]; then
+                    new_atts+=(" ${Yellow}SMART_Error_Counter_Log${Off} ${LiteRed}$errcount${Off}")
+                else
+                    changed_atts+=("${Yellow}SMART_Error_Counter_Log${Off} ${LiteRed}$errcount${Off}$show_increased")
+                fi
             fi
         else
             if [[ $increased != "yes" ]]; then
                 echo -e "SMART Error Counter Log:         ${LiteGreen}No Errors Logged${Off}"
+            elif [[ -n $show_increased ]]; then
+                if [[ $first_run == "yes" ]]; then
+                    new_atts+=(" ${Yellow}SMART_Error_Counter_Log${Off} $errcount")
+                else
+                    changed_atts+=("${Yellow}SMART_Error_Counter_Log${Off} $errcount$show_increased")
+                fi
             fi
         fi
     elif [[ $1 == "smart-log" ]]; then
@@ -1066,7 +1130,8 @@ smart_nvme(){
                     # Get data_units read or written
                     units="$(echo "$strIn" | awk '{print $3}')"
                     # Remove commas and convert to TB/GB/MB
-                    units_show="$(echo "${units//,}" | numfmt --to=si --suffix=B)"
+                    #units_show="$(echo "${units//,}" | numfmt --to=si --suffix=B)"
+                    units_show="$(echo $(( ${units//,} * sector_size * 1000 )) | numfmt --to=si --suffix=B --format="%.2f")"
                     # Show data_units read or written
                     if [[ $increased != "yes" ]]; then
                         echo "$strIn  ($units_show)"
@@ -1151,6 +1216,16 @@ short_attibutes_nvme(){
         if [[ $var2 =~ ^[0-9]+$ ]]; then
             if [[ $2 == "zero" && $var2 -eq "0" ]]; then
                 log_bad_nvme "$var3" "$var2"
+                # Add to changed_atts if value changed to 0 (show_increased set by log_bad_nvme)
+                if [[ -n $show_increased ]]; then
+                    if [[ $increased == "yes" ]]; then
+                        if [[ $first_run == "yes" ]]; then
+                            new_atts+=("$var4 ${Yellow}$var1${Off} $var2")
+                        else
+                            changed_atts+=("$var4 ${Yellow}$var1${Off} $var2$show_increased")
+                        fi
+                    fi
+                fi
             fi
         fi
     fi
