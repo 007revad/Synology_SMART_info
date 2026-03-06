@@ -1,3 +1,6 @@
+v1.4.38
+- Bug fix for getting NVMe error log quantity. Issue #64
+
 v1.4.37
 - Added decoding of Seagate and Synology HAT3300 HDD SMART raw attribute 188 Command_Timeout_Count. Issue #62
 

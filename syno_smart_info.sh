@@ -34,7 +34,7 @@
 # Description: This value tracks errors resulting from external shock or vibration.
 # Other names: G-Sense Error Rate, Shock Sense 
 
-scriptver="v1.4.37"
+scriptver="v1.4.38"
 script=Synology_SMART_info
 repo="007revad/Synology_SMART_info"
 
@@ -1005,7 +1005,7 @@ smart_nvme(){
 
     if [[ $1 == "error-log" ]]; then
         # Retrieve Error Log and show error count
-        errlog="$(nvme error-log "/dev/$drive" | grep error_count | uniq)"
+        errlog="$(nvme error-log "/dev/$drive" | grep error_count | head -1)"
         errcount="$(echo "$errlog" | awk '{print $3}')"
         if [[ $errcount -gt "0" ]]; then
             errtotal=$((errtotal +errcount))
