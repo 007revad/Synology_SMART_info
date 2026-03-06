@@ -11,7 +11,7 @@
 
 ### Description
 
-Show Synology smart test progress or smart health and attributes.
+Show Synology smart test progress or smart health and attributes. Can also email you when important values change.
 
 The script works in DSM 7, including DSM 7.2, DSM 7.3 and DSM 6.
 
