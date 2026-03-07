@@ -54,7 +54,7 @@ sudo -s /volume1/scripts/syno_smart_info.sh --all
 To see only important SMART attributes that have changed since you last ran the script run the script with the `-i` or `--increased` option:
 
 ```bash
-sudo -s /volume1/scripts/syno_smart_info.sh --all
+sudo -s /volume1/scripts/syno_smart_info.sh -i
 ```
 
 ### Scheduling the script in Synology's Task Scheduler
