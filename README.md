@@ -42,7 +42,7 @@ sudo -s /volume1/scripts/syno_smart_info.sh
 > **Note** <br>
 > Replace /volume1/scripts/ with the path to where the script is located.
 
-To see all the SMART attributes run the script with the -a or --all option:
+To see all the SMART attributes run the script with the `-a` or `--all` option:
 
 ```bash
 sudo -s /volume1/scripts/syno_smart_info.sh --all
@@ -50,6 +50,12 @@ sudo -s /volume1/scripts/syno_smart_info.sh --all
 
 > **Note** <br>
 > The script automatically shows all SMART attributes for any drives that don't return "SMART test passed".
+
+To see only important SMART attributes that have changed since you last ran the script run the script with the `-i` or `--increased` option:
+
+```bash
+sudo -s /volume1/scripts/syno_smart_info.sh --all
+```
 
 ### Scheduling the script in Synology's Task Scheduler
 
