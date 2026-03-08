@@ -21,6 +21,15 @@ In DSM 7.2.1 Synology removed the ability to view S.M.A.R.T. attributes in Stora
 > - v1.4.34 and later now decodes Seagate HDD and Synology HAT3300 HDD SMART values for attributes 1, 7, 195 and 240 with smartctl 6 or smartctl 7.
 > - v1.4.37 and later now also decodes Seagate HDD and Synology HAT3300 HDD the SMART value for attributes 188 with smartctl 6 or smartctl 7.
 
+### Optional
+
+Install SynoCommunity's SynoCli Disk Tools because it includes smartctl 7.5 as it has a better formatted output (especially for Seagate HDDs and Synology HAT3300 HDDs).
+
+There are 2 ways to install SynoCli Disk Tools:
+
+- [Add SynoCommunity as a Community package source](https://synocommunity.com/#easy-install) in Package Center then install SynoCli Disk Tools.
+- Or Download the spk file here https://synocommunity.com/package/synocli-disk and do a Manual Install in Package Center.
+
 ## Download the script
 
 1. Download the latest version _Source code (zip)_ from https://github.com/007revad/Synology_SMART_info/releases
