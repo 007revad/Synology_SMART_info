@@ -4,12 +4,13 @@
 
 set -Eeuo pipefail
 
+REPO="007revad/Synology_SMART_info"
 FILENAME="syno_smart_info.sh"
 TMP_FILENAME="/tmp/$FILENAME"
 
 function err() {
    local rc="$1"
-   echo "??? Unexpected error occured with RC $rc"
+   echo "??? Unexpected error occurred with RC $rc"
    local i=0
    local FRAMES=${#BASH_LINENO[@]}
    for ((i=FRAMES-2; i>=0; i--)); do
@@ -51,7 +52,7 @@ fi
 
 set +e
 echo "--- Downloading $FILENAME into $TMP_FILENAME ..."
-wget -q https://raw.githubusercontent.com/007revad/Synology_SMART_info/refs/heads/main/$FILENAME -O $TMP_FILENAME
+wget -q https://raw.githubusercontent.com/$REPO/refs/heads/main/$FILENAME -O $TMP_FILENAME
 (( $? )) && { echo "??? wget failed"; exit 1; }
 
 chmod 755 $TMP_FILENAME
