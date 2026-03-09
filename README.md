@@ -11,7 +11,7 @@
 
 ### Description
 
-Show Synology smart test progress or smart health and attributes.
+Show Synology smart test progress or smart health and attributes. Can also email you when important values change.
 
 The script works in DSM 7, including DSM 7.2, DSM 7.3 and DSM 6.
 
@@ -20,6 +20,15 @@ In DSM 7.2.1 Synology removed the ability to view S.M.A.R.T. attributes in Stora
 > **UPDATE** 
 > - v1.4.34 and later now decodes Seagate HDD and Synology HAT3300 HDD SMART values for attributes 1, 7, 195 and 240 with smartctl 6 or smartctl 7.
 > - v1.4.37 and later now also decodes Seagate HDD and Synology HAT3300 HDD the SMART value for attributes 188 with smartctl 6 or smartctl 7.
+
+### Optional
+
+Install SynoCommunity's SynoCli Disk Tools because it includes smartctl 7.5 as it has a better formatted output (especially for Seagate HDDs and Synology HAT3300 HDDs).
+
+There are 2 ways to install SynoCli Disk Tools:
+
+- [Add SynoCommunity as a Community package source](https://synocommunity.com/#easy-install) in Package Center then install SynoCli Disk Tools.
+- Or Download the spk file here https://synocommunity.com/package/synocli-disk and do a Manual Install in Package Center.
 
 ## Download the script
 
@@ -42,7 +51,7 @@ sudo -s /volume1/scripts/syno_smart_info.sh
 > **Note** <br>
 > Replace /volume1/scripts/ with the path to where the script is located.
 
-To see all the SMART attributes run the script with the -a or --all option:
+To see all the SMART attributes run the script with the `-a` or `--all` option:
 
 ```bash
 sudo -s /volume1/scripts/syno_smart_info.sh --all
@@ -50,6 +59,12 @@ sudo -s /volume1/scripts/syno_smart_info.sh --all
 
 > **Note** <br>
 > The script automatically shows all SMART attributes for any drives that don't return "SMART test passed".
+
+To see only important SMART attributes that have changed since you last ran the script run the script with the `-i` or `--increased` option:
+
+```bash
+sudo -s /volume1/scripts/syno_smart_info.sh -i
+```
 
 ### Scheduling the script in Synology's Task Scheduler
 
